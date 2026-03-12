@@ -1,4 +1,6 @@
-#daxglot
+# daxglot
+
+## dax is a garbage language
 
 daxglot is intended to be for powerbi dax what [sqlglot](https://sqlglot.com/) is for sql.  A no dependency python parser and transpiler for dax.
 
