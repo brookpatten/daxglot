@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "daxglot"
+version = "0"
+description = ""
+authors = ["Brook Patten <brook.patten@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+sqlglot="*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# [[tool.poetry.source]]
+# name = "pypi"
+# url = "url"
+# priority = "explicit"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.2"
+isort = "^5.13.2"
+black = "^24.3.0"
+sqlfluff = "^3.0.5"
+pre-commit = "^3.7.1"
+
+[tool.sqlfluff.core]
+templater = "placeholder"
+dialect = "sparksql"
+max_line_length = 150
+
+[tool.sqlfluff.layout.type.comma]
+line_position = "leading"
+
+[tool.sqlfluff.rules.references.special_chars]
+quoted_identifiers_policy = "none"
+
+[tool.sqlfluff.templater.placeholder]
+param_style = "dollar"
+
+[tool.isort]
+profile = "black"

@@ -1,0 +1,56 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+	"name": "daxglot",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"image": "mcr.microsoft.com/devcontainers/base:bullseye", 
+	"mounts": [
+		// IMPORTANT! your container will fail to start if the path in your WSL does not exist!
+		// use git credentials from the host wsl
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind",
+		//use poetry config/credentials from the host wsl
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.config/pypoetry,target=/home/vscode/.config/pypoetry,type=bind"
+	],
+	"runArgs": ["--name", "daxglot"],
+	"features": {
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "3.12"
+		},
+		"ghcr.io/devcontainers-extra/features/poetry:2": {}
+	},
+	"overrideFeatureInstallOrder": [
+		"ghcr.io/devcontainers/features/python",
+		"ghcr.io/devcontainers-extra/features/poetry"
+	],
+	
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"http.proxyStrictSSL": false
+			},
+			"extensions": [
+				"njpwerner.autodocstring",
+				"tamasfe.even-better-toml",
+				"github.vscode-github-actions",
+				"ms-python.vscode-pylance",
+				"ms-python.pylint",
+				"ms-python.python",
+				"ms-python.debugpy",
+				"ms-python.mypy-type-checker",
+				"dorzey.vscode-sqlfluff",
+				"redhat.vscode-yaml",
+				"ms-python.black-formatter",
+				"ms-python.isort"
+			]
+		}
+	},
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	// Configure tool-specific properties.
+	// "customizations": {},
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+}

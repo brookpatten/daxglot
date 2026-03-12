@@ -1,0 +1,85 @@
+name: Build, Test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  version:
+    name: Version & Tag
+    runs-on: ubuntu-latest
+    outputs:
+      fullSemVer: ${{ steps.version.outputs.fullSemVer }}
+      majorMinorPatch: ${{ steps.version.outputs.majorMinorPatch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: gittools/actions/gitversion/setup@v1.1.1
+        name: Install GitVersion
+        with:
+          versionSpec: "5.x"
+      - name: Determine Version
+        id: version
+        uses: gittools/actions/gitversion/execute@v1.1.1
+      - uses: rickstaa/action-create-tag@v1
+        with:
+          tag: ${{ steps.version.outputs.fullSemVer }}
+          tag_exists_error: true
+      - uses: rickstaa/action-create-tag@v1
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag: ${{ steps.version.outputs.majorMinorPatch }}
+          tag_exists_error: false
+
+  black:
+    name: Black (Python Formatting)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Black and isort
+        run: pip install black isort
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry Action
+        uses: snok/install-poetry@v1.3.4
+        with:
+          virtualenvs-in-project: true
+          options: "--check --verbose"
+      - name: Black
+        uses: jpetrucciani/black-check@24.3.0
+      - name: Run isort
+        run: isort --profile black .
+      - name: Check Formatting
+        run: black --check --diff --verbose .
+
+  test:
+    name: Test
+    needs: [version, black]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry Action
+        uses: snok/install-poetry@v1.3.4
+        with:
+          virtualenvs-in-project: true
+      - run: poetry self add poetry-version-plugin
+      - run: echo '__version__ = "${{ needs.version.outputs.majorMinorPatch }}"' > daxglot/__init__.py
+      - uses: databricks/setup-cli@main
+      - run: poetry add pytest-cov
+      - run: poetry install
+      - run: poetry build
+      - run: poetry run pytest --junitxml=testresults.xml --cov=./ --cov-report=xml:coverage.xml
