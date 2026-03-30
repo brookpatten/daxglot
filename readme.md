@@ -92,7 +92,7 @@ flowchart TB
     dimcols  --> y_dims
     window   --> y_measures
 
-    yaml_out --> sql_out(["📄 sales_mv.sql\nCREATE OR REPLACE VIEW dev.pbi.sales\nWITH METRICS LANGUAGE YAML AS\n$$ &lt;sales.yaml contents&gt; $$"])
+    yaml_out --> sql_out(["📄 sales_mv.sql\nCREATE OR REPLACE VIEW dev.pbi.sales\nWITH METRICS LANGUAGE YAML AS\n$$ sales.yaml contents $$"])
 ```
 
 ### 1 — Extraction
