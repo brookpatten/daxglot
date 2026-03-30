@@ -35,19 +35,19 @@ This writes one `.yaml` + one `_mv.sql` file per detected fact table into `./out
 flowchart TB
     %% ── Power BI source ──────────────────────────────────────────────────
     subgraph pbix ["📦 .pbix file"]
-        direction TB
-        pq["Power Query\nM expressions\n(source tables)"]
-        rels["Relationships\n(FK columns,\ncardinality)"]
+        direction LR
+        pq["Power Query\nM expressions"]
+        rels["Relationships\n(FK columns, cardinality)"]
         cols["Column schemas\n(names + dtypes)"]
-        dax["DAX measures\n(expression text,\ndisplay folder)"]
+        dax["DAX measures\n(expression text)"]
     end
 
     %% ── Extraction ───────────────────────────────────────────────────────
     subgraph ext ["PbixExtractor"]
         direction TB
-        ucref["UC ref\nextraction\n(catalog.schema.table)"]
-        sqlext["NativeQuery\nSQL extraction"]
-        filtex["SelectRows\nfilter extraction"]
+        ucref["UC ref\n(catalog.schema.table)"]
+        sqlext["NativeQuery\nSQL"]
+        filtex["SelectRows\nfilter predicate"]
     end
 
     pq --> ucref & sqlext & filtex
@@ -55,47 +55,44 @@ flowchart TB
     %% ── Analysis ─────────────────────────────────────────────────────────
     subgraph ana ["ModelAnalyzer"]
         direction TB
-        classify["Fact / dim\nclassification"]
-        jointree["Join-tree\nbuilder"]
-        dimcols["Dimension\ncolumn extraction"]
+        classify["fact / dim\nclassification"]
+        jointree["join-tree\nbuilder"]
+        dimcols["dimension column\nextraction"]
     end
 
-    rels  --> classify & jointree
-    cols  --> dimcols
-    classify --> jointree --> dimcols
+    rels        --> classify & jointree
+    cols        --> dimcols
+    classify    --> jointree
+    jointree    --> dimcols
 
     %% ── DAX translation ──────────────────────────────────────────────────
-    subgraph daxglot ["daxglot — DAX → SQL"]
+    subgraph daxglot ["daxglot"]
         direction TB
-        parser["Parser\n(DAX → AST)"]
-        transpiler["Transpiler\n(AST → sqlglot)"]
-        window["Window spec\nbuilder\n(time-intelligence)"]
+        parser["DAX parser\n(→ AST)"]
+        transpiler["transpiler\n(AST → SQL expr)"]
+        window["window spec builder\n(time-intelligence)"]
     end
 
     dax --> parser --> transpiler --> window
 
-    %% ── Generation ───────────────────────────────────────────────────────
-    subgraph gen ["MetricViewGenerator"]
+    %% ── YAML output ──────────────────────────────────────────────────────
+    subgraph yaml_out ["📄 sales.yaml"]
         direction TB
-        src["source:\nUC ref / SQL / table name"]
-        joins_out["joins:"]
-        dims_out["dimensions:"]
-        measures_out["measures:\n+ window:"]
+        y_source["source:\ndev.pbi.sales\n— or —\nSELECT … (NativeQuery SQL)"]
+        y_filter["filter:\nStatus = 'Active'"]
+        y_joins["joins:\n- name: customer\n  source: dev.pbi.customer\n  on: source.CustID = customer.CustID"]
+        y_dims["dimensions:\n- name: order_date\n  expr: OrderDate\n- name: customer_name\n  expr: customer.Name"]
+        y_measures["measures:\n- name: net_sales\n  expr: SUM(Amount) FILTER (WHERE …)\n  window:\n  - order: date\n    range: trailing 1 year"]
     end
 
-    ucref  --> src
-    sqlext --> src
-    filtex --> src
+    ucref    --> y_source
+    sqlext   --> y_source
+    filtex   --> y_filter
+    jointree --> y_joins
+    dimcols  --> y_dims
+    window   --> y_measures
 
-    jointree --> joins_out
-    dimcols  --> dims_out
-    window   --> measures_out
-
-    %% ── Outputs ──────────────────────────────────────────────────────────
-    yaml_out(["sales.yaml"])
-    sql_out(["sales_mv.sql\n(CREATE … WITH METRICS)"])
-
-    gen --> yaml_out --> sql_out
+    yaml_out --> sql_out(["📄 sales_mv.sql\nCREATE OR REPLACE VIEW … WITH METRICS\nLANGUAGE YAML AS $$ … $$"])
 ```
 
 ### 1 — Extraction
