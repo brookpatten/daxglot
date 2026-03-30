@@ -185,6 +185,21 @@ class PbixExtractor:
         except Exception:  # noqa: BLE001
             pass
 
+        # Detect calculated tables (defined purely in DAX, no M expression)
+        calculated_tables: set[str] = set()
+        try:
+            calc_df = self._ray.calculated_tables
+            if calc_df is not None and len(calc_df) > 0:
+                col = "TableName" if "TableName" in calc_df.columns else calc_df.columns[0]
+                for t in calc_df[col].tolist():
+                    if t:
+                        calculated_tables.add(str(t))
+        except Exception:  # noqa: BLE001
+            pass
+        # Fallback: tables that appear in model.tables but have no M expression
+        # and no rows in the relationships/schema are NOT necessarily calculated,
+        # so we only rely on the explicit calculated_tables attribute above.
+
         # Resolve UC source for each table
         for table in model.tables:
             m_expr = pq_map.get(table)
@@ -195,6 +210,7 @@ class PbixExtractor:
             model.source_tables[table] = SourceTable(
                 name=table,
                 uc_ref=uc_ref,
+                is_calculated=table in calculated_tables,
                 m_expression=m_expr,
                 filter_expr=filter_expr,
             )

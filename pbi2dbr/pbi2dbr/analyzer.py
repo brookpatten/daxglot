@@ -14,6 +14,7 @@ from .models import (
     Relationship,
     SemanticModel,
     SourceTable,
+    _is_system_table,
 )
 
 
@@ -32,6 +33,20 @@ class AnalysisOptions:
 
     exclude_tables: list[str] = None  # type: ignore[assignment]
     """Tables to skip entirely."""
+
+    skip_calculated: bool = True
+    """Skip DAX-calculated tables (no Unity Catalog backing storage)."""
+
+    skip_no_uc_ref: bool = False
+    """Skip tables whose Unity Catalog source reference cannot be resolved.
+    When ``False`` (default), such tables are included with a warning."""
+
+    skip_system_tables: bool = True
+    """Skip Power BI auto-generated tables (DateTableTemplate, LocalDateTable_*, etc.)."""
+
+    require_measures_or_numeric: bool = False
+    """Skip tables that have neither DAX measures nor any numeric columns.
+    Useful for filtering out pure bridge/lookup tables."""
 
     def __post_init__(self) -> None:
         if self.exclude_tables is None:
@@ -90,6 +105,12 @@ class ModelAnalyzer:
                 continue
             if not table_name:
                 continue
+            # Fast-path: skip system tables before building joins/dimensions
+            if self._opts.skip_system_tables and _is_system_table(table_name):
+                self._warnings.append(
+                    f"Skipping system table '{table_name}'"
+                )
+                continue
             src = self._model.source_tables.get(
                 table_name, SourceTable(name=table_name))
             joins = self._build_join_tree(
@@ -97,15 +118,24 @@ class ModelAnalyzer:
             dimensions = self._extract_dimensions(
                 table_name, joins, active_rels)
             measures = self._model.measures_for(table_name)
-            results.append(
-                FactTable(
-                    name=table_name,
-                    source_table=src,
-                    dimensions=dimensions,
-                    measures=measures,
-                    joins=joins,
-                )
+            fact = FactTable(
+                name=table_name,
+                source_table=src,
+                dimensions=dimensions,
+                measures=measures,
+                joins=joins,
             )
+            skip, reason = fact.should_skip(
+                skip_calculated=self._opts.skip_calculated,
+                skip_no_uc_ref=self._opts.skip_no_uc_ref,
+                skip_system_tables=False,  # already handled above
+                require_measures_or_numeric=self._opts.require_measures_or_numeric,
+                columns=self._model.columns_for(table_name),
+            )
+            if skip:
+                self._warnings.append(f"Skipping: {reason}")
+                continue
+            results.append(fact)
 
         if not results:
             self._warnings.append(

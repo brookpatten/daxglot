@@ -231,3 +231,161 @@ class TestWarnings:
         analyzer = ModelAnalyzer(model)
         analyzer.analyze()
         assert len(analyzer.warnings) > 0
+
+
+# ---------------------------------------------------------------------------
+# Skip / should_skip logic
+# ---------------------------------------------------------------------------
+
+
+class TestShouldSkip:
+    """Unit tests for FactTable.should_skip()."""
+
+    def _make_fact(self, name="Sales", uc_ref="dev.pbi.sales",
+                   is_calculated=False, measures=None, columns=None):
+        return FactTable(
+            name=name,
+            source_table=SourceTable(name=name, uc_ref=uc_ref,
+                                     is_calculated=is_calculated),
+            measures=measures or [],
+            dimensions=[],
+        ), columns or []
+
+    def test_normal_table_not_skipped(self):
+        ft, cols = self._make_fact(
+            measures=[PbiMeasure("Sales", "m", "= SUM(Sales[x])")]
+        )
+        skip, _ = ft.should_skip()
+        assert not skip
+
+    def test_calculated_table_skipped_by_default(self):
+        ft, cols = self._make_fact(is_calculated=True)
+        skip, reason = ft.should_skip()
+        assert skip
+        assert "calculated" in reason.lower()
+
+    def test_calculated_table_not_skipped_when_flag_off(self):
+        ft, cols = self._make_fact(is_calculated=True)
+        skip, _ = ft.should_skip(skip_calculated=False)
+        assert not skip
+
+    def test_no_uc_ref_skipped_when_flag_on(self):
+        ft, cols = self._make_fact(uc_ref=None)
+        skip, reason = ft.should_skip(skip_no_uc_ref=True)
+        assert skip
+        assert "Unity Catalog" in reason
+
+    def test_no_uc_ref_not_skipped_by_default(self):
+        ft, cols = self._make_fact(uc_ref=None)
+        skip, _ = ft.should_skip()
+        assert not skip
+
+    def test_system_table_skipped_by_default(self):
+        for name in ["DateTableTemplate", "LocalDateTable_abc",
+                     "DateTable_12345", "__InternalTable"]:
+            ft, cols = self._make_fact(name=name)
+            skip, reason = ft.should_skip()
+            assert skip, f"Expected '{name}' to be skipped"
+            assert "system" in reason.lower()
+
+    def test_system_table_not_skipped_when_flag_off(self):
+        ft, cols = self._make_fact(name="DateTableTemplate")
+        skip, _ = ft.should_skip(skip_system_tables=False)
+        assert not skip
+
+    def test_no_measures_no_numeric_skipped_when_flag_on(self):
+        ft, cols = self._make_fact(
+            measures=[],
+            columns=[ColumnSchema("Bridge", "id_a", "int64"),
+                     ColumnSchema("Bridge", "id_b", "int64")],
+        )
+        # int64 is numeric — so should NOT skip (bridge has numeric FKs)
+        skip, _ = ft.should_skip(
+            require_measures_or_numeric=True,
+            columns=[ColumnSchema("Bridge", "id_a", "int64")],
+        )
+        assert not skip
+
+    def test_no_measures_no_numeric_actually_skipped(self):
+        ft, _ = self._make_fact(measures=[])
+        skip, reason = ft.should_skip(
+            require_measures_or_numeric=True,
+            columns=[ColumnSchema("T", "code", "object"),
+                     ColumnSchema("T", "label", "object")],
+        )
+        assert skip
+        assert "no DAX measures" in reason
+
+
+class TestAnalyzerSkipsSystemTables:
+    """Integration: ModelAnalyzer skips system tables via AnalysisOptions."""
+
+    def test_date_table_template_excluded(self):
+        model = SemanticModel(
+            tables=["Sales", "DateTableTemplate"],
+            columns=[
+                ColumnSchema("Sales", "Amount", "float64"),
+            ],
+            measures=[PbiMeasure("Sales", "Total", "= SUM(Sales[Amount])")],
+            relationships=[],
+            source_tables={
+                "Sales": SourceTable("Sales", uc_ref="dev.pbi.sales"),
+                "DateTableTemplate": SourceTable("DateTableTemplate"),
+            },
+        )
+        opts = AnalysisOptions(skip_system_tables=True)
+        results = ModelAnalyzer(model, opts).analyze()
+        names = [f.name for f in results]
+        assert "DateTableTemplate" not in names
+        assert "Sales" in names
+
+    def test_system_tables_included_when_flag_off(self):
+        model = SemanticModel(
+            tables=["DateTableTemplate"],
+            columns=[ColumnSchema("DateTableTemplate",
+                                  "Date", "datetime64[ns]")],
+            measures=[PbiMeasure("DateTableTemplate", "m",
+                                 "= SUM(DateTableTemplate[Date])")],
+            relationships=[],
+            source_tables={"DateTableTemplate": SourceTable(
+                "DateTableTemplate")},
+        )
+        opts = AnalysisOptions(skip_system_tables=False)
+        results = ModelAnalyzer(model, opts).analyze()
+        assert any(f.name == "DateTableTemplate" for f in results)
+
+    def test_calculated_table_excluded(self):
+        model = SemanticModel(
+            tables=["Sales", "CalcTable"],
+            columns=[
+                ColumnSchema("Sales", "Amount", "float64"),
+                ColumnSchema("CalcTable", "Val", "float64"),
+            ],
+            measures=[PbiMeasure("Sales", "Total", "= SUM(Sales[Amount])")],
+            relationships=[],
+            source_tables={
+                "Sales": SourceTable("Sales", uc_ref="dev.pbi.sales"),
+                "CalcTable": SourceTable("CalcTable", is_calculated=True),
+            },
+        )
+        opts = AnalysisOptions(skip_calculated=True)
+        results = ModelAnalyzer(model, opts).analyze()
+        names = [f.name for f in results]
+        assert "CalcTable" not in names
+
+    def test_skip_produces_warning(self):
+        model = SemanticModel(
+            tables=["DateTableTemplate"],
+            columns=[],
+            measures=[
+                PbiMeasure("DateTableTemplate", "m",
+                           "= COUNT(DateTableTemplate[Date])")
+            ],
+            relationships=[],
+            source_tables={"DateTableTemplate": SourceTable(
+                "DateTableTemplate")},
+        )
+        analyzer = ModelAnalyzer(
+            model, AnalysisOptions(skip_system_tables=True))
+        analyzer.analyze()
+        assert any("DateTableTemplate" in w for w in analyzer.warnings)
