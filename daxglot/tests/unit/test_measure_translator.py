@@ -189,6 +189,98 @@ class TestTimeIntelligence:
         )
         assert r.window_spec[0].order == "orderdate" or r.window_spec[0].order != ""
 
+    def test_datesinperiod_trailing(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESINPERIOD('Date'[Date], LASTDATE('Date'[Date]), -7, DAY))"
+        )
+        assert len(r.window_spec) == 1
+        assert r.window_spec[0].range == "trailing 7 day"
+
+    def test_datesinperiod_leading(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESINPERIOD('Date'[Date], TODAY(), 3, MONTH))"
+        )
+        assert len(r.window_spec) == 1
+        assert r.window_spec[0].range == "leading 3 month"
+
+    def test_datesbetween_startofyear(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESBETWEEN('Date'[Date], STARTOFYEAR('Date'[Date]), LASTDATE('Date'[Date])))"
+        )
+        assert any("cumulative" in ws.range for ws in r.window_spec)
+        assert any("current" in ws.range for ws in r.window_spec)
+
+    def test_datesbetween_startofmonth(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESBETWEEN('Date'[Date], STARTOFMONTH('Date'[Date]), LASTDATE('Date'[Date])))"
+        )
+        assert any("cumulative" in ws.range for ws in r.window_spec)
+
+    def test_datesbetween_unrecognised_warns(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESBETWEEN('Date'[Date], DATE(2024,1,1), DATE(2024,12,31)))"
+        )
+        assert len(r.warnings) > 0
+        assert any("DATESBETWEEN" in w for w in r.warnings)
+
+    def test_datesytd_fiscal_year_end_warning(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESYTD('Date'[Date], \"3/31\"))"
+        )
+        assert any("cumulative" in ws.range for ws in r.window_spec)
+        assert any("fiscal year-end" in w for w in r.warnings)
+
+    def test_totalytd_fiscal_year_end_warning(self):
+        r = translated(
+            "= TOTALYTD(SUM(Sales[Amount]), 'Date'[Date], \"6/30\")")
+        assert any("cumulative" in ws.range for ws in r.window_spec)
+        assert any("fiscal year-end" in w for w in r.warnings)
+
+    def test_openingbalanceyear_semiadditive_first(self):
+        r = translated(
+            "= OPENINGBALANCEYEAR(SUM(Inventory[Stock]), 'Date'[Date])")
+        assert len(r.window_spec) >= 1
+        assert all(ws.semiadditive == "first" for ws in r.window_spec)
+        assert any("cumulative" in ws.range for ws in r.window_spec)
+
+    def test_closingbalanceyear_semiadditive_last(self):
+        r = translated(
+            "= CLOSINGBALANCEYEAR(SUM(Inventory[Stock]), 'Date'[Date])")
+        assert len(r.window_spec) >= 1
+        assert all(ws.semiadditive == "last" for ws in r.window_spec)
+
+    def test_openingbalancemonth_semiadditive_first(self):
+        r = translated(
+            "= OPENINGBALANCEMONTH(SUM(Inventory[Stock]), 'Date'[Date])")
+        assert len(r.window_spec) >= 1
+        assert all(ws.semiadditive == "first" for ws in r.window_spec)
+
+    def test_period_dimensions_used_for_ytd(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESYTD('Date'[Date]))",
+            period_dimensions={"year": "fiscal_year"},
+        )
+        year_specs = [ws for ws in r.window_spec if ws.range == "current"]
+        assert len(year_specs) == 1
+        assert year_specs[0].order == "fiscal_year"
+        # No heuristic-guess warning since the period was explicitly provided
+        assert not any("guessed" in w for w in r.warnings)
+
+    def test_period_dimensions_missing_emits_warning(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), DATESYTD('Date'[Date]))",
+            period_dimensions={},  # empty — no year dim registered
+        )
+        assert any("guessed" in w for w in r.warnings)
+
+    def test_totalytd_with_period_dimensions(self):
+        r = translated(
+            "= TOTALYTD(SUM(Sales[Amount]), 'Date'[Date])",
+            period_dimensions={"year": "order_year"},
+        )
+        year_specs = [ws for ws in r.window_spec if ws.range == "current"]
+        assert year_specs[0].order == "order_year"
+
 
 # ---------------------------------------------------------------------------
 # VAR / RETURN

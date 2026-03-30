@@ -30,12 +30,14 @@ class DaxBridge:
         joins: Optional[list[Join]] = None,
         existing_measures: Optional[list[Measure]] = None,
         date_dimension: str = "date",
+        period_dimensions: Optional[dict[str, str]] = None,
         dialect: str = "databricks",
     ) -> None:
         self._source_table = source_table
         self._joins = joins or []
         self._existing_measures = existing_measures or []
         self._date_dimension = date_dimension
+        self._period_dimensions = period_dimensions
         self._dialect = dialect
 
         # Build alias → original column prefix map from joins
@@ -70,6 +72,7 @@ class DaxBridge:
             dax,
             dialect=self._dialect,
             date_dimension=date_dim,
+            period_dimensions=self._period_dimensions,
         )
 
         # Post-process: normalise column references
@@ -193,10 +196,14 @@ def translate_fact_table(
             date_dim = dim.name
             break
 
+    # Build period dimension registry from dimensions that truncate to a period boundary
+    period_dimensions = _build_period_dimensions(fact.dimensions)
+
     bridge = DaxBridge(
         source_table=fact.name,
         joins=fact.joins,
         date_dimension=date_dim,
+        period_dimensions=period_dimensions or None,
         dialect=dialect,
     )
 
@@ -207,3 +214,31 @@ def translate_fact_table(
         translated.append(m)
 
     return translated
+
+
+def _build_period_dimensions(dimensions: list[Dimension]) -> dict[str, str]:
+    """Scan dimensions and return a mapping of period → dimension name.
+
+    Detects:
+    - Dimensions whose ``expr`` contains ``DATE_TRUNC('year'|'quarter'|'month', ...)``.
+    - Dimensions whose *name* contains a period keyword as a fallback.
+
+    DATE_TRUNC expressions always take priority over name-keyword matches,
+    regardless of the order the dimensions appear in the list.
+    """
+    result: dict[str, str] = {}
+    # First pass: DATE_TRUNC expressions (authoritative signal)
+    for dim in dimensions:
+        m = re.match(
+            r"DATE_TRUNC\s*\(\s*['\"](\w+)['\"]", dim.expr, re.IGNORECASE)
+        if m:
+            period = m.group(1).lower()
+            if period in ("year", "quarter", "month") and period not in result:
+                result[period] = dim.name
+    # Second pass: dimension name contains period keyword (fallback only)
+    for dim in dimensions:
+        name_lower = dim.name.lower()
+        for period in ("year", "quarter", "month"):
+            if period in name_lower and period not in result:
+                result[period] = dim.name
+    return result

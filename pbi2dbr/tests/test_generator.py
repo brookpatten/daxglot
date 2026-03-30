@@ -328,3 +328,105 @@ class TestBuildSpec:
         fact = _simple_fact()
         spec = gen.build_spec(fact, view_name_prefix="pbi_")
         assert spec.name.startswith("pbi_")
+
+
+# ---------------------------------------------------------------------------
+# _build_period_dimensions and period registry tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPeriodDimensions:
+    """Tests for the period dimension registry builder in translator.py."""
+
+    def test_detects_date_trunc_year(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        dims = [
+            Dimension("order_year", "DATE_TRUNC('year', order_date)"),
+            Dimension("order_date", "order_date"),
+        ]
+        result = _build_period_dimensions(dims)
+        assert result.get("year") == "order_year"
+
+    def test_detects_date_trunc_quarter(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        dims = [
+            Dimension("order_quarter", "DATE_TRUNC('quarter', order_date)")]
+        result = _build_period_dimensions(dims)
+        assert result.get("quarter") == "order_quarter"
+
+    def test_detects_date_trunc_month(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        dims = [Dimension("order_month", "DATE_TRUNC('month', order_date)")]
+        result = _build_period_dimensions(dims)
+        assert result.get("month") == "order_month"
+
+    def test_falls_back_to_name_keyword(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        dims = [Dimension("fiscal_year", "FiscalYear")]
+        result = _build_period_dimensions(dims)
+        assert result.get("year") == "fiscal_year"
+
+    def test_date_trunc_takes_priority_over_name(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        # DATE_TRUNC dim should win over a name-keyword dim for same period
+        dims = [
+            # name match only
+            Dimension("year_num", "YEAR(order_date)"),
+            # DATE_TRUNC
+            Dimension("order_year", "DATE_TRUNC('year', order_date)"),
+        ]
+        result = _build_period_dimensions(dims)
+        assert result.get("year") == "order_year"
+
+    def test_empty_dimensions_returns_empty(self):
+        from pbi2dbr.translator import _build_period_dimensions
+
+        assert _build_period_dimensions([]) == {}
+
+
+class TestTranslatorWithPeriodDimensions:
+    """Integration: period dimensions flow through DaxBridge → translate_measure."""
+
+    def _make_fact(self, dax: str, dims: list[Dimension]) -> FactTable:
+        from pbi2dbr.models import PbiMeasure
+
+        return FactTable(
+            name="Sales",
+            source_table=SourceTable("Sales", uc_ref="dev.pbi.sales"),
+            dimensions=dims,
+            measures=[PbiMeasure(
+                table="Sales", name="ytd_sales", expression=dax)],
+        )
+
+    def test_ytd_uses_registry_dim(self):
+        from pbi2dbr.translator import translate_fact_table
+
+        dims = [
+            Dimension("order_date", "order_date"),
+            Dimension("order_year", "DATE_TRUNC('year', order_date)"),
+        ]
+        fact = self._make_fact(
+            "= CALCULATE(SUM(Sales[Amount]), DATESYTD('Date'[order_date]))", dims
+        )
+        measures = translate_fact_table(fact)
+        assert len(measures) == 1
+        window = measures[0].window
+        current_specs = [w for w in window if w["range"] == "current"]
+        assert len(current_specs) == 1
+        assert current_specs[0]["order"] == "order_year"
+
+    def test_no_period_dim_issues_warning(self):
+        from pbi2dbr.translator import translate_fact_table
+
+        dims = [Dimension("order_date", "order_date")]  # no year dim
+        fact = self._make_fact(
+            "= CALCULATE(SUM(Sales[Amount]), DATESYTD('Date'[order_date]))", dims
+        )
+        measures = translate_fact_table(fact)
+        assert len(measures) == 1
+        assert any("guessed" in w for w in measures[0].warnings)

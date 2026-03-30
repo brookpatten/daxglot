@@ -15,7 +15,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.sources]
-daxglot = { path = "../", editable = true }
+daxglot = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8.2.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["../daxglot"]
+markers = [
+    "integration: slower tests that use real PBIX files",
+    "unit: fast tests using only local and mocked resources",
+]

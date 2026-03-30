@@ -89,6 +89,21 @@ _INTERVAL_UNITS = {
     "YEAR": "year",
 }
 
+# Standalone period-aggregate functions that take (expression, date_col, ...) as arguments.
+# Maps fname → (period, semiadditive).  These are handled in _translate_function_call,
+# not as CALCULATE filter arguments.
+_STANDALONE_PERIOD_FUNCS: dict[str, tuple[str, str]] = {
+    "TOTALYTD": ("year", "last"),
+    "TOTALQTD": ("quarter", "last"),
+    "TOTALMTD": ("month", "last"),
+    "OPENINGBALANCEYEAR": ("year", "first"),
+    "OPENINGBALANCEQUARTER": ("quarter", "first"),
+    "OPENINGBALANCEMONTH": ("month", "first"),
+    "CLOSINGBALANCEYEAR": ("year", "last"),
+    "CLOSINGBALANCEQUARTER": ("quarter", "last"),
+    "CLOSINGBALANCEMONTH": ("month", "last"),
+}
+
 # ---------------------------------------------------------------------------
 # Result types
 # ---------------------------------------------------------------------------
@@ -133,6 +148,7 @@ def translate_measure(
     dax_text: str,
     dialect: str = "databricks",
     date_dimension: str = "date",
+    period_dimensions: Optional[dict[str, str]] = None,
 ) -> MeasureTranslation:
     """Translate a DAX measure expression to Databricks metric view components.
 
@@ -141,6 +157,10 @@ def translate_measure(
         dialect: Target SQL dialect for rendered expressions (passed to sqlglot).
         date_dimension: Name of the date dimension to use as the ``order:`` field
             when time-intelligence patterns are detected.
+        period_dimensions: Optional mapping of period name to dimension name,
+            e.g. ``{"year": "order_year", "quarter": "order_quarter", "month": "order_month"}``.
+            Used to resolve period-boundary dimension names for YTD/QTD/MTD windows.
+            When ``None``, a heuristic name is derived from ``date_dimension`` with a warning.
 
     Returns:
         :class:`MeasureTranslation` containing ``sql_expr``, optional
@@ -161,8 +181,12 @@ def translate_measure(
         )
 
     node = ast.expr if isinstance(ast, MeasureExpr) else ast
-    result = _translate_node(node, dialect=dialect,
-                             date_dimension=date_dimension)
+    result = _translate_node(
+        node,
+        dialect=dialect,
+        date_dimension=date_dimension,
+        period_dimensions=period_dimensions,
+    )
     result.original_dax = dax_text
     return result
 
@@ -176,6 +200,7 @@ def _translate_node(
     node: DaxNode,
     dialect: str,
     date_dimension: str,
+    period_dimensions: Optional[dict[str, str]] = None,
 ) -> MeasureTranslation:
     """Dispatch to the appropriate pattern handler."""
 
@@ -183,10 +208,10 @@ def _translate_node(
         return _simple_agg(node, dialect)
 
     if isinstance(node, Calculate):
-        return _translate_calculate(node, dialect, date_dimension)
+        return _translate_calculate(node, dialect, date_dimension, period_dimensions)
 
     if isinstance(node, VarBlock):
-        return _translate_var_block(node, dialect, date_dimension)
+        return _translate_var_block(node, dialect, date_dimension, period_dimensions)
 
     if isinstance(node, BinaryOp):
         return _translate_binary(node, dialect, date_dimension)
@@ -195,7 +220,7 @@ def _translate_node(
         return _translate_conditional(node, dialect)
 
     if isinstance(node, FunctionCall):
-        return _translate_function_call(node, dialect, date_dimension)
+        return _translate_function_call(node, dialect, date_dimension, period_dimensions)
 
     if isinstance(node, Iterator):
         return _translate_iterator(node, dialect)
@@ -219,6 +244,7 @@ def _translate_calculate(
     node: Calculate,
     dialect: str,
     date_dimension: str,
+    period_dimensions: Optional[dict[str, str]] = None,
 ) -> MeasureTranslation:
     warnings: list[str] = []
     time_intel: list[FunctionCall] = []
@@ -256,16 +282,18 @@ def _translate_calculate(
                 f"— base aggregate returned"
             )
 
-    base = _translate_node(node.expr, dialect, date_dimension)
+    base = _translate_node(
+        node.expr, dialect, date_dimension, period_dimensions)
 
     # --- Time-intelligence → window spec ---
     if time_intel:
         wspec: list[WindowSpec] = []
         for fc in time_intel:
-            ws = _resolve_window(fc, date_dimension)
-            if ws:
-                wspec.extend(ws)
-            else:
+            ws, win_warns = _resolve_window(
+                fc, date_dimension, period_dimensions)
+            wspec.extend(ws)
+            warnings.extend(win_warns)
+            if not ws and not win_warns:
                 warnings.append(
                     f"{fc.name.upper()}() could not be converted to a window spec "
                     f"— emitting base aggregate"
@@ -301,9 +329,14 @@ def _translate_calculate(
     )
 
 
-def _resolve_window(fc: FunctionCall, date_dimension: str) -> list[WindowSpec]:
-    """Map a time-intelligence FunctionCall to WindowSpec entries."""
+def _resolve_window(
+    fc: FunctionCall,
+    date_dimension: str,
+    period_dimensions: Optional[dict[str, str]] = None,
+) -> tuple[list[WindowSpec], list[str]]:
+    """Map a time-intelligence FunctionCall to (WindowSpec entries, warnings)."""
     fname = fc.name.upper()
+    pdims = period_dimensions or {}
 
     # Derive date column name from the first argument if it's a ColumnRef
     date_col = date_dimension
@@ -311,47 +344,55 @@ def _resolve_window(fc: FunctionCall, date_dimension: str) -> list[WindowSpec]:
         date_col = fc.args[0].column.lower().replace(" ", "_")
 
     if fname == "SAMEPERIODLASTYEAR":
-        return [WindowSpec(order=date_col, range="trailing 1 year")]
+        return [WindowSpec(order=date_col, range="trailing 1 year")], []
 
     if fname == "PREVIOUSYEAR":
-        return [WindowSpec(order=date_col, range="trailing 1 year")]
+        return [WindowSpec(order=date_col, range="trailing 1 year")], []
 
     if fname == "PREVIOUSQUARTER":
-        return [WindowSpec(order=date_col, range="trailing 1 quarter")]
+        return [WindowSpec(order=date_col, range="trailing 1 quarter")], []
 
     if fname == "PREVIOUSMONTH":
-        return [WindowSpec(order=date_col, range="trailing 1 month")]
+        return [WindowSpec(order=date_col, range="trailing 1 month")], []
 
     if fname == "NEXTYEAR":
-        return [WindowSpec(order=date_col, range="leading 1 year")]
+        return [WindowSpec(order=date_col, range="leading 1 year")], []
 
     if fname == "NEXTQUARTER":
-        return [WindowSpec(order=date_col, range="leading 1 quarter")]
+        return [WindowSpec(order=date_col, range="leading 1 quarter")], []
 
     if fname == "NEXTMONTH":
-        return [WindowSpec(order=date_col, range="leading 1 month")]
+        return [WindowSpec(order=date_col, range="leading 1 month")], []
 
     if fname in ("DATESYTD", "TOTALYTD"):
-        # Cumulative year-to-date: aggregate cumulatively, reset at year boundary
-        year_dim = _derive_period_dim(date_col, "year")
+        warns: list[str] = []
+        # DATESYTD(date_col [, "MM/DD"])  — check for fiscal year-end string arg
+        for arg in fc.args[1:]:
+            if isinstance(arg, Literal) and arg.kind == "STRING":
+                warns.append(
+                    f"{fname}() fiscal year-end argument '{arg.value}' detected — "
+                    "standard calendar-year YTD window emitted; verify fiscal year boundary"
+                )
+        year_dim, pdim_warns = _resolve_period_dim(date_col, "year", pdims)
         return [
             WindowSpec(order=date_col, range="cumulative"),
             WindowSpec(order=year_dim, range="current"),
-        ]
+        ], warns + pdim_warns
 
     if fname in ("DATESQTD", "TOTALQTD"):
-        quarter_dim = _derive_period_dim(date_col, "quarter")
+        quarter_dim, pdim_warns = _resolve_period_dim(
+            date_col, "quarter", pdims)
         return [
             WindowSpec(order=date_col, range="cumulative"),
             WindowSpec(order=quarter_dim, range="current"),
-        ]
+        ], pdim_warns
 
     if fname in ("DATESMTD", "TOTALMTD"):
-        month_dim = _derive_period_dim(date_col, "month")
+        month_dim, pdim_warns = _resolve_period_dim(date_col, "month", pdims)
         return [
             WindowSpec(order=date_col, range="cumulative"),
             WindowSpec(order=month_dim, range="current"),
-        ]
+        ], pdim_warns
 
     if fname == "DATEADD":
         # DATEADD(date_col, offset, unit)
@@ -362,8 +403,8 @@ def _resolve_window(fc: FunctionCall, date_dimension: str) -> list[WindowSpec]:
             unit = _INTERVAL_UNITS.get(raw_unit, raw_unit.lower())
             direction = "trailing" if n < 0 else "leading"
             count = abs(n) if n != 0 else 1
-            return [WindowSpec(order=date_col, range=f"{direction} {count} {unit}")]
-        return []
+            return [WindowSpec(order=date_col, range=f"{direction} {count} {unit}")], []
+        return [], []
 
     if fname == "PARALLELPERIOD":
         # PARALLELPERIOD(date_col, offset, unit) — similar to DATEADD
@@ -374,11 +415,59 @@ def _resolve_window(fc: FunctionCall, date_dimension: str) -> list[WindowSpec]:
             unit = _INTERVAL_UNITS.get(raw_unit, raw_unit.lower())
             direction = "trailing" if n < 0 else "leading"
             count = abs(n) if n != 0 else 1
-            return [WindowSpec(order=date_col, range=f"{direction} {count} {unit}")]
-        return []
+            return [WindowSpec(order=date_col, range=f"{direction} {count} {unit}")], []
+        return [], []
 
-    # DATESBETWEEN / DATESINPERIOD — cannot express as simple window
-    return []
+    if fname == "DATESINPERIOD":
+        # DATESINPERIOD(date_col, start_date, num_intervals, interval)
+        # Negative num_intervals → trailing; positive → leading
+        if len(fc.args) >= 4:
+            n_node, unit_node = fc.args[2], fc.args[3]
+            n = _extract_int_offset(n_node)
+            raw_unit = _extract_unit_name(unit_node)
+            unit = _INTERVAL_UNITS.get(raw_unit, raw_unit.lower())
+            if n != 0:
+                direction = "trailing" if n < 0 else "leading"
+                count = abs(n)
+                return [WindowSpec(order=date_col, range=f"{direction} {count} {unit}")], []
+        return [], [
+            "DATESINPERIOD() could not be converted to a window spec — emitting base aggregate"
+        ]
+
+    if fname == "DATESBETWEEN":
+        # DATESBETWEEN(date_col, start_date, end_date)
+        # Recognise STARTOFYEAR/QUARTER/MONTH(col) → YTD/QTD/MTD pattern
+        if len(fc.args) >= 3:
+            start_node = fc.args[1]
+            if isinstance(start_node, FunctionCall):
+                sfname = start_node.name.upper()
+                if sfname == "STARTOFYEAR":
+                    year_dim, pdim_warns = _resolve_period_dim(
+                        date_col, "year", pdims)
+                    return [
+                        WindowSpec(order=date_col, range="cumulative"),
+                        WindowSpec(order=year_dim, range="current"),
+                    ], pdim_warns
+                if sfname == "STARTOFQUARTER":
+                    quarter_dim, pdim_warns = _resolve_period_dim(
+                        date_col, "quarter", pdims)
+                    return [
+                        WindowSpec(order=date_col, range="cumulative"),
+                        WindowSpec(order=quarter_dim, range="current"),
+                    ], pdim_warns
+                if sfname == "STARTOFMONTH":
+                    month_dim, pdim_warns = _resolve_period_dim(
+                        date_col, "month", pdims)
+                    return [
+                        WindowSpec(order=date_col, range="cumulative"),
+                        WindowSpec(order=month_dim, range="current"),
+                    ], pdim_warns
+        return [], [
+            "DATESBETWEEN() pattern not recognised — emitting base aggregate; "
+            "supported: DATESBETWEEN(col, STARTOFYEAR(col), LASTDATE(col)) and similar"
+        ]
+
+    return [], []
 
 
 def _derive_period_dim(date_col: str, period: str) -> str:
@@ -387,6 +476,25 @@ def _derive_period_dim(date_col: str, period: str) -> str:
         if suffix in date_col:
             return date_col.replace(suffix, period)
     return f"{date_col}_{period}"
+
+
+def _resolve_period_dim(
+    date_col: str,
+    period: str,
+    period_dimensions: dict[str, str],
+) -> tuple[str, list[str]]:
+    """Return (dimension_name, warnings) for a period boundary dimension.
+
+    Looks up *period* in *period_dimensions* first; falls back to
+    :func:`_derive_period_dim` with a warning so the user knows to verify.
+    """
+    if period in period_dimensions:
+        return period_dimensions[period], []
+    guessed = _derive_period_dim(date_col, period)
+    return guessed, [
+        f"Period dimension for '{period}' not found in registry — "
+        f"guessed '{guessed}'; pass period_dimensions={{'{period}': '<dim_name>'}} to override"
+    ]
 
 
 def _extract_int_offset(node: DaxNode) -> int:
@@ -421,6 +529,7 @@ def _translate_var_block(
     node: VarBlock,
     dialect: str,
     date_dimension: str,
+    period_dimensions: Optional[dict[str, str]] = None,
 ) -> MeasureTranslation:
     """Inline scalar VAR definitions and re-translate the RETURN expression."""
     # Build var map from the original definitions
@@ -429,7 +538,8 @@ def _translate_var_block(
     # Try inlining and re-translating
     try:
         inlined = _inline_vars(node.return_expr, var_map)
-        result = _translate_node(inlined, dialect, date_dimension)
+        result = _translate_node(
+            inlined, dialect, date_dimension, period_dimensions)
         if not result.is_approximate:
             return result
         # Inlined but approximate — still better than a raw CTE
@@ -518,21 +628,49 @@ def _translate_function_call(
     node: FunctionCall,
     dialect: str,
     date_dimension: str,
+    period_dimensions: Optional[dict[str, str]] = None,
 ) -> MeasureTranslation:
     """Translate generic function calls including DIVIDE and time-intel in non-CALCULATE position."""
     fname = node.name.upper()
 
-    # TOTALYTD / TOTALQTD / TOTALMTD used directly (not wrapped in CALCULATE)
-    # Syntax: TOTALYTD(expr, date_col)
-    if fname in ("TOTALYTD", "TOTALQTD", "TOTALMTD") and len(node.args) >= 2:
-        inner_result = _translate_node(node.args[0], dialect, date_dimension)
-        fake_fc = FunctionCall(name=fname, args=(node.args[1],))
-        wspec = _resolve_window(fake_fc, date_dimension)
+    # Standalone period-aggregate functions: TOTALYTD/QTD/MTD, OPENING/CLOSINGBALANCE*
+    # Syntax: FUNC(expression, date_col [, filter_or_year_end])
+    if fname in _STANDALONE_PERIOD_FUNCS and len(node.args) >= 2:
+        period, semiadditive = _STANDALONE_PERIOD_FUNCS[fname]
+        inner_result = _translate_node(
+            node.args[0], dialect, date_dimension, period_dimensions)
+        pdims = period_dimensions or {}
+
+        # Derive date column from second argument
+        date_col = date_dimension
+        if isinstance(node.args[1], ColumnRef):
+            date_col = node.args[1].column.lower().replace(" ", "_")
+
+        period_dim, pdim_warns = _resolve_period_dim(date_col, period, pdims)
+
+        # Fiscal year-end warning for YTD-family functions only (year boundary)
+        fy_warns: list[str] = []
+        if period == "year":
+            for arg in node.args[2:]:
+                if isinstance(arg, Literal) and arg.kind == "STRING":
+                    fy_warns.append(
+                        f"{fname}() fiscal year-end argument '{arg.value}' detected — "
+                        "standard calendar-year YTD window emitted; verify fiscal year boundary"
+                    )
+
+        wspec = [
+            WindowSpec(order=date_col, range="cumulative",
+                       semiadditive=semiadditive),
+            WindowSpec(order=period_dim, range="current",
+                       semiadditive=semiadditive),
+        ]
+        all_warnings = inner_result.warnings + pdim_warns + fy_warns
         return MeasureTranslation(
             sql_expr=inner_result.sql_expr,
             window_spec=wspec,
-            warnings=inner_result.warnings,
-            is_approximate=inner_result.is_approximate,
+            warnings=all_warnings,
+            is_approximate=inner_result.is_approximate or bool(
+                pdim_warns + fy_warns),
         )
 
     try:
