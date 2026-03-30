@@ -459,3 +459,78 @@ class TestTranslatorWithPeriodDimensions:
         measures = translate_fact_table(fact)
         assert len(measures) == 1
         assert any("guessed" in w for w in measures[0].warnings)
+
+
+# ---------------------------------------------------------------------------
+# Value.NativeQuery → source_sql tests
+# ---------------------------------------------------------------------------
+
+
+class TestNativeQuerySource:
+    """build_spec + to_yaml when source table has Value.NativeQuery SQL."""
+
+    _SIMPLE_SQL = "SELECT id, amount FROM prod.pbi.orders"
+    _MULTILINE_SQL = "SELECT o.id, c.region\nFROM prod.pbi.orders o\nJOIN prod.pbi.customers c ON o.cust_id = c.id"
+
+    def _make_fact_with_sql(self, sql: str, filter_expr=None) -> FactTable:
+        return FactTable(
+            name="Orders",
+            source_table=SourceTable(
+                "Orders", source_sql=sql, filter_expr=filter_expr),
+            dimensions=[],
+            measures=[],
+        )
+
+    def test_build_spec_source_is_sql(self):
+        gen = MetricViewGenerator()
+        fact = self._make_fact_with_sql(self._SIMPLE_SQL)
+        spec = gen.build_spec(fact)
+        assert spec.source == self._SIMPLE_SQL
+
+    def test_build_spec_prefers_sql_over_uc_ref(self):
+        gen = MetricViewGenerator()
+        fact = FactTable(
+            name="Orders",
+            source_table=SourceTable(
+                "Orders", uc_ref="dev.pbi.orders", source_sql=self._SIMPLE_SQL),
+            dimensions=[],
+            measures=[],
+        )
+        spec = gen.build_spec(fact)
+        assert spec.source == self._SIMPLE_SQL
+
+    def test_build_spec_filter_suppressed_when_sql_present(self):
+        """filter_expr should NOT be forwarded when source_sql is set (SQL embeds it)."""
+        gen = MetricViewGenerator()
+        fact = self._make_fact_with_sql(
+            self._SIMPLE_SQL, filter_expr="Status = 'A'")
+        spec = gen.build_spec(fact)
+        assert spec.filter is None
+
+    def test_to_yaml_single_line_sql_parses_back(self):
+        gen = MetricViewGenerator()
+        fact = self._make_fact_with_sql(self._SIMPLE_SQL)
+        spec = gen.build_spec(fact)
+        text = gen.to_yaml(spec)
+        doc = pyyaml.safe_load(text)
+        assert doc["source"] == self._SIMPLE_SQL
+
+    def test_to_yaml_multiline_sql_is_block_literal(self):
+        """PyYAML emits multiline strings as block literals (|) when there are newlines."""
+        gen = MetricViewGenerator()
+        fact = self._make_fact_with_sql(self._MULTILINE_SQL)
+        spec = gen.build_spec(fact)
+        text = gen.to_yaml(spec)
+        # Block literal indicator must appear in raw YAML
+        assert "source: |" in text
+        # And round-trip must preserve the SQL content
+        doc = pyyaml.safe_load(text)
+        assert "FROM prod.pbi.orders" in doc["source"]
+        assert "JOIN prod.pbi.customers" in doc["source"]
+
+    def test_to_yaml_no_filter_key_when_sql_source(self):
+        gen = MetricViewGenerator()
+        fact = self._make_fact_with_sql(self._SIMPLE_SQL, filter_expr="x = 1")
+        spec = gen.build_spec(fact)
+        doc = pyyaml.safe_load(gen.to_yaml(spec))
+        assert "filter" not in doc

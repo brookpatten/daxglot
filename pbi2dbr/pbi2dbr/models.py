@@ -63,6 +63,8 @@ class SourceTable:
     m_expression: Optional[str] = None   # raw Power Query M expression
     # SQL WHERE predicate extracted from Table.SelectRows
     filter_expr: Optional[str] = None
+    # Full SQL query extracted from Value.NativeQuery (takes precedence over uc_ref)
+    source_sql: Optional[str] = None
 
 
 @dataclass

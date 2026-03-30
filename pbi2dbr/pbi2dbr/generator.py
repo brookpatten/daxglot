@@ -42,8 +42,14 @@ class MetricViewGenerator:
         """Build a :class:`~pbi2dbr.models.MetricViewSpec` from an analysed FactTable.
 
         Any warnings from DAX translation are preserved on each :class:`~pbi2dbr.models.Measure`.
+        When the source table was defined via ``Value.NativeQuery``, the full SQL text
+        is used as the metric view ``source:`` (emitted as a YAML block literal).
         """
-        source = fact.source_table.uc_ref or fact.name
+        # Prefer extracted NativeQuery SQL over plain table reference
+        if fact.source_table.source_sql:
+            source = fact.source_table.source_sql
+        else:
+            source = fact.source_table.uc_ref or fact.name
 
         # Translate all DAX measures
         measures = translate_fact_table(fact, dialect=self._dialect)
@@ -51,11 +57,15 @@ class MetricViewGenerator:
         # Clean up view name
         view_name = _clean_name(f"{view_name_prefix}{fact.name}")
 
+        # When SQL is the source the filter is already embedded — don't also emit it.
+        filter_expr = None if fact.source_table.source_sql else (
+            fact.source_table.filter_expr or None)
+
         return MetricViewSpec(
             name=view_name,
             source=source,
             comment=f"Metric view generated from PowerBI table '{fact.name}'",
-            filter=fact.source_table.filter_expr or None,
+            filter=filter_expr,
             dimensions=fact.dimensions,
             measures=measures,
             joins=fact.joins,
@@ -63,7 +73,11 @@ class MetricViewGenerator:
         )
 
     def to_yaml(self, spec: MetricViewSpec) -> str:
-        """Serialise a MetricViewSpec to a YAML string (version 1.1)."""
+        """Serialise a MetricViewSpec to a YAML string (version 1.1).
+
+        Multiline strings (e.g. ``Value.NativeQuery`` SQL) are emitted as YAML
+        block literals (``|`` style) for readability.
+        """
         doc: dict = {"version": "1.1"}
         if spec.comment:
             doc["comment"] = spec.comment
@@ -82,6 +96,7 @@ class MetricViewGenerator:
 
         return yaml.dump(
             doc,
+            Dumper=_LiteralDumper,
             default_flow_style=False,
             allow_unicode=True,
             sort_keys=False,
@@ -148,6 +163,24 @@ class MetricViewGenerator:
             spec, catalog, schema), encoding="utf-8")
 
         return yaml_path, sql_path
+
+
+# ---------------------------------------------------------------------------
+# YAML helpers
+# ---------------------------------------------------------------------------
+
+
+class _LiteralDumper(yaml.Dumper):
+    """Custom YAML dumper that renders multiline strings as block literals (|)."""
+
+
+def _literal_str_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+_LiteralDumper.add_representer(str, _literal_str_representer)
 
 
 # ---------------------------------------------------------------------------

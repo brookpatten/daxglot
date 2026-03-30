@@ -58,6 +58,14 @@ _SIMPLE_PREDICATE_RE = re.compile(
 _M_OP_TO_SQL = {"=": "=", "<>": "!=",
                 "<": "<", "<=": "<=", ">": ">", ">=": ">="}
 
+# Value.NativeQuery(connection, "SQL text" [, params [, options]])
+# Captures the SQL string literal (first string arg after the connection arg).
+# Handles both single-step and multi-step let bindings.
+_NATIVE_QUERY_RE = re.compile(
+    r'Value\.NativeQuery\s*\([^,]+,\s*"((?:[^"\\]|\\.|"")*)"',
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 class PbixExtractor:
     """Extract semantic model components from a PBIX file using pbixray.
@@ -207,12 +215,14 @@ class PbixExtractor:
                 table, m_expr, source_catalog, source_schema
             )
             filter_expr = _extract_filter_expr(m_expr) if m_expr else None
+            source_sql = _extract_native_query_sql(m_expr) if m_expr else None
             model.source_tables[table] = SourceTable(
                 name=table,
                 uc_ref=uc_ref,
                 is_calculated=table in calculated_tables,
                 m_expression=m_expr,
                 filter_expr=filter_expr,
+                source_sql=source_sql,
             )
 
         return model
@@ -319,3 +329,32 @@ def _to_snake(name: str) -> str:
     # Replace spaces, hyphens, dots with underscores
     s = re.sub(r"[\s\-\.]", "_", s)
     return s.lower()
+
+
+def _extract_native_query_sql(m_expr: str) -> Optional[str]:
+    """Extract the SQL text from a ``Value.NativeQuery`` call in an M expression.
+
+    Returns the SQL string normalised to strip M-style escaped double-quote
+    pairs (``""`` → ``"``).  Returns ``None`` if no ``Value.NativeQuery``
+    pattern is found.
+
+    Examples::
+
+        let
+            src = Databricks.Catalogs("host"),
+            q = Value.NativeQuery(src, "SELECT o.id, c.region
+                FROM prod.pbi.orders o
+                JOIN prod.pbi.customers c ON o.cust_id = c.id")
+        in q
+
+        → "SELECT o.id, c.region\\n    FROM prod.pbi.orders o\\n    ..."
+    """
+    m = _NATIVE_QUERY_RE.search(m_expr)
+    if not m:
+        return None
+    sql = m.group(1)
+    # Unescape M double-quote pairs ("" → ") which can appear in SQL strings
+    sql = sql.replace('""', '"')
+    # Normalise leading/trailing whitespace
+    sql = sql.strip()
+    return sql if sql else None

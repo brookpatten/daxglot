@@ -347,6 +347,70 @@ class TestPbixExtractorMocked:
 
 
 # ---------------------------------------------------------------------------
+# _extract_native_query_sql unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractNativeQuerySql:
+    """Unit tests for the _extract_native_query_sql helper."""
+
+    def setup_method(self):
+        from pbi2dbr.extractor import _extract_native_query_sql  # noqa: PLC0415
+        self._fn = _extract_native_query_sql
+
+    def test_single_line_sql_extracted(self):
+        m_expr = 'let q = Value.NativeQuery(src, "SELECT id FROM prod.pbi.orders") in q'
+        assert self._fn(m_expr) == "SELECT id FROM prod.pbi.orders"
+
+    def test_multiline_sql_extracted(self):
+        m_expr = (
+            'let q = Value.NativeQuery(src, "SELECT o.id, c.region\n'
+            'FROM prod.pbi.orders o\n'
+            'JOIN prod.pbi.customers c ON o.cust_id = c.id") in q'
+        )
+        result = self._fn(m_expr)
+        assert result is not None
+        assert "SELECT o.id" in result
+        assert "JOIN prod.pbi.customers" in result
+
+    def test_m_escaped_double_quotes_unescaped(self):
+        """M uses "" to embed a literal quote inside a string."""
+        m_expr = 'let q = Value.NativeQuery(src, "SELECT ""col"" FROM t") in q'
+        assert self._fn(m_expr) == 'SELECT "col" FROM t'
+
+    def test_returns_none_when_no_native_query(self):
+        m_expr = 'let Source = Databricks.Catalogs("host"), nav = Source{[Name="t"]}[Data] in nav'
+        assert self._fn(m_expr) is None
+
+    def test_case_insensitive_function_name(self):
+        m_expr = 'let q = value.nativequery(src, "SELECT 1") in q'
+        assert self._fn(m_expr) == "SELECT 1"
+
+    def test_source_sql_populated_on_model(self):
+        """extract() sets source_sql when M expression contains Value.NativeQuery."""
+        pq = [
+            (
+                "Orders",
+                'let q = Value.NativeQuery(src, "SELECT id, amount FROM prod.pbi.orders") in q',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["Orders"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        assert model.source_tables["Orders"].source_sql == "SELECT id, amount FROM prod.pbi.orders"
+
+    def test_no_native_query_source_sql_is_none(self):
+        """Normal navigation M expression → source_sql is None."""
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray()
+            model = PbixExtractor(self.fake_pbix).extract()
+        assert model.source_tables["Sales"].source_sql is None
+
+
+# ---------------------------------------------------------------------------
 # Integration tests with real PBIX files (skipped if files missing)
 # ---------------------------------------------------------------------------
 
