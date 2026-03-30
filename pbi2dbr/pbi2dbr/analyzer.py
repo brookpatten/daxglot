@@ -153,6 +153,7 @@ class ModelAnalyzer:
         active_rels: list[Relationship],
         visited: set[str],
         depth: int,
+        parent_alias: str = "source",
     ) -> list[Join]:
         if depth >= self._opts.max_snowflake_depth:
             return []
@@ -168,13 +169,17 @@ class ModelAnalyzer:
             dim_src = self._model.source_tables.get(
                 dim_table, SourceTable(name=dim_table))
             uc_ref = dim_src.uc_ref or dim_table
-            # ON clause uses "source." prefix for the fact/parent table's column
-            on_clause = f"source.{rel.from_column} = {_alias(dim_table)}.{rel.to_column}"
+            dim_alias = _alias(dim_table)
+            # Left-hand side of ON uses the parent's alias ("source" at depth 0,
+            # or the parent join alias at deeper levels)
+            on_clause = f"{parent_alias}.{rel.from_column} = {dim_alias}.{rel.to_column}"
             nested = self._build_join_tree(
-                dim_table, active_rels, visited, depth + 1)
+                dim_table, active_rels, visited, depth + 1,
+                parent_alias=dim_alias,
+            )
             joins.append(
                 Join(
-                    name=_alias(dim_table),
+                    name=dim_alias,
                     source_uc_ref=uc_ref,
                     on_clause=on_clause,
                     nested_joins=nested,
@@ -216,38 +221,47 @@ class ModelAnalyzer:
                 )
             )
 
-        # Expose columns from joined dimension tables via dot-notation
+        # Expose columns from joined dimension tables via dot-notation (arbitrarily deep)
+        self._collect_join_dimensions(
+            joins, prefix_parts=[], dimensions=dimensions, seen=seen)
+
+        return dimensions
+
+    def _collect_join_dimensions(
+        self,
+        joins: list[Join],
+        prefix_parts: list[str],
+        dimensions: list[Dimension],
+        seen: set[str],
+    ) -> None:
+        """Recursively walk the join tree and emit a Dimension for every column.
+
+        ``prefix_parts`` is the chain of join aliases leading to the current level,
+        e.g. ``['order', 'product']`` for a 3-level snowflake.  The dimension name
+        becomes ``order_product_column_name`` and the expr ``order.product.column_name``.
+        """
         for join in joins:
-            dim_table_name = _unalias(join.name, self._model.tables)
-            for col in self._model.columns_for(dim_table_name):
-                dim_name = f"{join.name}_{_friendly(col.column)}"
+            table_name = _unalias(join.name, self._model.tables)
+            current_parts = prefix_parts + [join.name]
+            name_prefix = "_".join(current_parts)
+            expr_prefix = ".".join(current_parts)
+            for col in self._model.columns_for(table_name):
+                dim_name = f"{name_prefix}_{_friendly(col.column)}"
                 if dim_name in seen:
                     continue
                 seen.add(dim_name)
                 dimensions.append(
                     Dimension(
                         name=dim_name,
-                        expr=f"{join.name}.{col.column}",
-                        comment=f"From joined table {dim_table_name}",
+                        expr=f"{expr_prefix}.{col.column}",
+                        comment=f"From joined table {table_name}",
                     )
                 )
-            # Recurse for nested joins (snowflake)
-            for nested_join in join.nested_joins:
-                nested_table = _unalias(nested_join.name, self._model.tables)
-                for col in self._model.columns_for(nested_table):
-                    dim_name = f"{join.name}_{nested_join.name}_{_friendly(col.column)}"
-                    if dim_name in seen:
-                        continue
-                    seen.add(dim_name)
-                    dimensions.append(
-                        Dimension(
-                            name=dim_name,
-                            expr=f"{join.name}.{nested_join.name}.{col.column}",
-                            comment=f"From joined table {nested_table}",
-                        )
-                    )
-
-        return dimensions
+            # Recurse for nested joins
+            if join.nested_joins:
+                self._collect_join_dimensions(
+                    join.nested_joins, current_parts, dimensions, seen
+                )
 
 
 # ---------------------------------------------------------------------------

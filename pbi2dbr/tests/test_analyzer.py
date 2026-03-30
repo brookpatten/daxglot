@@ -180,6 +180,43 @@ class TestJoinTree:
         # No further nesting beyond depth limit
         assert len(a_ft.joins[0].nested_joins[0].nested_joins) == 0
 
+    def test_nested_join_on_clause_uses_parent_alias(self):
+        """Bug fix: ON clause for a nested join must reference the parent join alias,
+        not the hard-coded 'source' prefix."""
+        # Chain: fact → order → product
+        model = SemanticModel(
+            tables=["fact", "order", "product"],
+            columns=[
+                ColumnSchema("fact", "order_id", "int64"),
+                ColumnSchema("order", "order_id", "int64"),
+                ColumnSchema("order", "product_id", "int64"),
+                ColumnSchema("product", "product_id", "int64"),
+                ColumnSchema("product", "name", "object"),
+            ],
+            measures=[PbiMeasure("fact", "M", "= COUNT(fact[order_id])")],
+            relationships=[
+                Relationship("fact", "order_id", "order", "order_id"),
+                Relationship("order", "product_id", "product", "product_id"),
+            ],
+        )
+        analyzer = ModelAnalyzer(model, AnalysisOptions(max_snowflake_depth=3))
+        results = analyzer.analyze()
+        fact_ft = next(f for f in results if f.name == "fact")
+
+        # Top-level join: fact → order, left side must be "source"
+        order_join = fact_ft.joins[0]
+        assert order_join.name == "order"
+        assert order_join.on_clause.startswith("source."), (
+            f"Expected ON to start with 'source.', got: {order_join.on_clause!r}"
+        )
+
+        # Nested join: order → product, left side must be "order" (NOT "source")
+        product_join = order_join.nested_joins[0]
+        assert product_join.name == "product"
+        assert product_join.on_clause.startswith("order."), (
+            f"Expected ON to start with 'order.', got: {product_join.on_clause!r}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Dimension extraction
@@ -212,6 +249,47 @@ class TestDimensionExtraction:
         prefixed = [
             d for d in sales_ft.dimensions if d.name.startswith("customer")]
         assert len(prefixed) >= 1
+
+    def test_deeply_nested_columns_exposed(self):
+        """Bug fix: dimension extraction must recurse beyond 2 levels."""
+        # Chain: fact → order → product → category
+        model = SemanticModel(
+            tables=["fact", "order", "product", "category"],
+            columns=[
+                ColumnSchema("fact", "order_id", "int64"),
+                ColumnSchema("order", "order_id", "int64"),
+                ColumnSchema("order", "product_id", "int64"),
+                ColumnSchema("product", "product_id", "int64"),
+                ColumnSchema("product", "category_id", "int64"),
+                ColumnSchema("category", "category_id", "int64"),
+                ColumnSchema("category", "label", "object"),
+            ],
+            measures=[PbiMeasure("fact", "M", "= COUNT(fact[order_id])")],
+            relationships=[
+                Relationship("fact", "order_id", "order", "order_id"),
+                Relationship("order", "product_id", "product", "product_id"),
+                Relationship("product", "category_id",
+                             "category", "category_id"),
+            ],
+        )
+        analyzer = ModelAnalyzer(model, AnalysisOptions(max_snowflake_depth=4))
+        results = analyzer.analyze()
+        fact_ft = next(f for f in results if f.name == "fact")
+
+        dim_names = {d.name for d in fact_ft.dimensions}
+        # Level 1: order columns
+        assert any(n.startswith("order_") for n in dim_names)
+        # Level 2: product columns
+        assert any(n.startswith("order_product_") for n in dim_names)
+        # Level 3: category columns — this was the bug; previously not extracted
+        assert any(n.startswith("order_product_category_") for n in dim_names), (
+            f"Missing level-3 dimensions. Got: {sorted(dim_names)}"
+        )
+
+        # Check expr format is correct dot-notation chain
+        category_dim = next(
+            d for d in fact_ft.dimensions if "category_label" in d.name)
+        assert category_dim.expr == "order.product.category.label"
 
     def test_measures_attached(self):
         analyzer = ModelAnalyzer(_simple_model())
