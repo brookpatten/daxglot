@@ -411,6 +411,63 @@ class TestExtractNativeQuerySql:
 
 
 # ---------------------------------------------------------------------------
+# UC ref resolution: new connector patterns
+# ---------------------------------------------------------------------------
+
+
+class TestResolveUcRefExtended:
+    """Unit tests for the expanded _resolve_uc_ref patterns."""
+
+    def _resolve(self, m_expr, default_catalog=None, default_schema=None, table="T"):
+        from pbi2dbr.extractor import PbixExtractor
+        return PbixExtractor._resolve_uc_ref(table, m_expr, default_catalog, default_schema)
+
+    def test_sql_database_connector(self):
+        """Sql.Database("server", "mydb") + nav steps → mydb.schema.table."""
+        m = (
+            'let Source = Sql.Database("adb-123.azuredatabricks.net", "prod"), '
+            'db = Source{[Name="pbi"]}[Data], '
+            'tbl = db{[Name="orders"]}[Data] in tbl'
+        )
+        assert self._resolve(m) == "prod.pbi.orders"
+
+    def test_databricks_catalog_option(self):
+        """Databricks.Catalogs(..., [Catalog="dev"]) + 2 nav steps → dev.schema.table."""
+        m = (
+            'let Source = Databricks.Catalogs("host", [Catalog="dev"]), '
+            'schema = Source{[Name="pbi"]}[Data], '
+            'tbl = schema{[Name="sales"]}[Data] in tbl'
+        )
+        assert self._resolve(m) == "dev.pbi.sales"
+
+    def test_item_kind_navigation(self):
+        """{[Item="x"][Kind="Table"]} style navigation with 3 steps."""
+        m = (
+            'let Source = Databricks.Catalogs("host"), '
+            'cat = Source{[Item="prod"][Kind="Table"]}[Data], '
+            'sch = cat{[Item="pbi"][Kind="Table"]}[Data], '
+            'tbl = sch{[Item="orders"][Kind="Table"]}[Data] in tbl'
+        )
+        assert self._resolve(m) == "prod.pbi.orders"
+
+    def test_sql_database_two_nav_steps_uses_db_as_catalog(self):
+        """With only 2 nav steps, catalog from Sql.Database is used."""
+        m = (
+            'let Source = Sql.Database("server", "mycat"), '
+            'sch = Source{[Name="myschema"]}[Data], '
+            'tbl = sch{[Name="mytable"]}[Data] in tbl'
+        )
+        assert self._resolve(m) == "mycat.myschema.mytable"
+
+    def test_unknown_connector_falls_back_to_defaults(self):
+        """Custom connector with no recognisable catalog → use defaults."""
+        m = 'let src = CustomConnector("host"), t = src{[Name="orders"]}[Data] in t'
+        result = self._resolve(
+            m, default_catalog="devcat", default_schema="devsch")
+        assert result == "devcat.devsch.orders"
+
+
+# ---------------------------------------------------------------------------
 # Integration tests with real PBIX files (skipped if files missing)
 # ---------------------------------------------------------------------------
 

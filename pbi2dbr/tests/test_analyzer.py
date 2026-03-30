@@ -467,3 +467,141 @@ class TestAnalyzerSkipsSystemTables:
             model, AnalysisOptions(skip_system_tables=True))
         analyzer.analyze()
         assert any("DateTableTemplate" in w for w in analyzer.warnings)
+
+
+# ---------------------------------------------------------------------------
+# Inactive FK column fix
+# ---------------------------------------------------------------------------
+
+
+class TestInactiveFkExclusion:
+    """Inactive-relationship FK columns must not appear as dimensions."""
+
+    def test_inactive_fk_excluded_from_dimensions(self):
+        model = SemanticModel(
+            tables=["Sales", "Customer", "AltCustomer"],
+            columns=[
+                ColumnSchema("Sales", "OrderID", "int64"),
+                ColumnSchema("Sales", "CustomerID", "int64"),
+                ColumnSchema("Sales", "AltCustID", "int64"),
+                ColumnSchema("Sales", "Amount", "float64"),
+                ColumnSchema("Customer", "CustomerID", "int64"),
+                ColumnSchema("Customer", "Name", "object"),
+                ColumnSchema("AltCustomer", "AltCustID", "int64"),
+                ColumnSchema("AltCustomer", "Name", "object"),
+            ],
+            measures=[PbiMeasure("Sales", "Total", "= SUM(Sales[Amount])")],
+            relationships=[
+                Relationship("Sales", "CustomerID", "Customer",
+                             "CustomerID", is_active=True),
+                Relationship("Sales", "AltCustID", "AltCustomer",
+                             "AltCustID", is_active=False),
+            ],
+            source_tables={
+                "Sales": SourceTable("Sales", uc_ref="dev.pbi.sales"),
+                "Customer": SourceTable("Customer", uc_ref="dev.pbi.customer"),
+                "AltCustomer": SourceTable("AltCustomer", uc_ref="dev.pbi.alt_customer"),
+            },
+        )
+        results = ModelAnalyzer(model).analyze()
+        sales = next(f for f in results if f.name == "Sales")
+        dim_exprs = {d.expr for d in sales.dimensions}
+        # Both FK columns should be excluded (active and inactive)
+        assert "CustomerID" not in dim_exprs
+        assert "AltCustID" not in dim_exprs
+        # Non-FK columns still present
+        assert "OrderID" in dim_exprs
+        assert "Amount" in dim_exprs
+
+
+# ---------------------------------------------------------------------------
+# Dimension name collision fix
+# ---------------------------------------------------------------------------
+
+
+class TestDimensionNameCollisions:
+    """Columns with the same sanitised name get a _2, _3 suffix."""
+
+    def test_special_chars_sanitised(self):
+        from pbi2dbr.analyzer import _friendly
+        assert _friendly("Sales Amount") == "sales_amount"
+        assert _friendly("Cost (USD)") == "cost_usd"
+        assert _friendly("% Margin") == "margin"
+        assert _friendly("A/B Test") == "a_b_test"
+
+    def test_empty_after_sanitise_gets_col(self):
+        from pbi2dbr.analyzer import _friendly
+        assert _friendly("###") == "col"
+
+    def test_duplicate_names_get_suffix(self):
+        from pbi2dbr.analyzer import _unique_name
+        seen: set[str] = {"sales_amount"}
+        assert _unique_name("sales_amount", seen) == "sales_amount_2"
+        seen.add("sales_amount_2")
+        assert _unique_name("sales_amount", seen) == "sales_amount_3"
+
+    def test_no_collision_no_suffix(self):
+        from pbi2dbr.analyzer import _unique_name
+        assert _unique_name("order_id", set()) == "order_id"
+
+
+# ---------------------------------------------------------------------------
+# Orphaned measures re-homing fix
+# ---------------------------------------------------------------------------
+
+
+class TestOrphanMeasureRehoming:
+    """Measures on a no-relationship table are re-homed to the referenced fact table."""
+
+    def test_measures_on_isolated_table_rehomed(self):
+        """_Measures is a calculated table (is_calculated=True) so it gets skipped;
+        its measures should be re-homed to Sales which references the same columns."""
+        model = SemanticModel(
+            tables=["Sales", "_Measures"],
+            columns=[
+                ColumnSchema("Sales", "CustomerID", "int64"),
+                ColumnSchema("Sales", "Amount", "float64"),
+                ColumnSchema("_Measures", "__dummy", "object"),
+            ],
+            measures=[
+                PbiMeasure("Sales", "Direct", "= SUM(Sales[Amount])"),
+                PbiMeasure("_Measures", "Total Rev", "= SUM(Sales[Amount])"),
+                PbiMeasure("_Measures", "Avg Rev", "= AVERAGE(Sales[Amount])"),
+            ],
+            relationships=[],
+            source_tables={
+                "Sales": SourceTable("Sales", uc_ref="dev.pbi.sales"),
+                "_Measures": SourceTable("_Measures", is_calculated=True),
+            },
+        )
+        # _Measures is a calculated table → skipped; its measures are orphaned and
+        # re-homed to Sales (which those measures reference via Sales[Amount]).
+        results = ModelAnalyzer(model, AnalysisOptions(
+            skip_calculated=True)).analyze()
+        sales = next((f for f in results if f.name == "Sales"), None)
+        assert sales is not None
+        measure_names = {m.name for m in sales.measures}
+        assert "Total Rev" in measure_names
+        assert "Avg Rev" in measure_names
+
+    def test_unresolvable_orphan_produces_warning(self):
+        """Orphan measure with no table refs in DAX → warning, not crash."""
+        model = SemanticModel(
+            tables=["Sales", "_Measures"],
+            columns=[
+                ColumnSchema("Sales", "Amount", "float64"),
+                ColumnSchema("_Measures", "__dummy", "object"),
+            ],
+            measures=[
+                PbiMeasure("Sales", "Direct", "= SUM(Sales[Amount])"),
+                PbiMeasure("_Measures", "Const", "= 42"),
+            ],
+            relationships=[],
+            source_tables={
+                "Sales": SourceTable("Sales", uc_ref="dev.pbi.sales"),
+                "_Measures": SourceTable("_Measures", is_calculated=True),
+            },
+        )
+        analyzer = ModelAnalyzer(model, AnalysisOptions(skip_calculated=True))
+        analyzer.analyze()
+        assert any("Const" in w for w in analyzer.warnings)

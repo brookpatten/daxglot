@@ -137,6 +137,22 @@ class ModelAnalyzer:
                 continue
             results.append(fact)
 
+        # Re-home measures from tables that never became fact tables
+        # (common pattern: a dedicated "_Measures" table with no relationships)
+        generated_names = {ft.name for ft in results}
+        orphaned = [
+            m for m in self._model.measures if m.table not in generated_names]
+        if orphaned:
+            for pbi_m in orphaned:
+                target = _find_measure_home(pbi_m.expression, results)
+                if target is not None:
+                    target.measures.append(pbi_m)
+                else:
+                    self._warnings.append(
+                        f"Measure '{pbi_m.name}' (table '{pbi_m.table}') could not be "
+                        f"re-homed: no fact table references its columns"
+                    )
+
         if not results:
             self._warnings.append(
                 "No fact tables detected — check relationships or use --fact-tables"
@@ -200,18 +216,17 @@ class ModelAnalyzer:
         dimensions: list[Dimension] = []
         seen: set[str] = set()
 
-        # Columns of the fact table itself (exclude FK columns)
+        # Exclude FK columns from ALL relationships (active + inactive) to avoid
+        # leaking surrogate keys and role-playing dimension FKs as dimensions.
         fk_cols = {
             r.from_column
-            for r in active_rels
+            for r in self._model.relationships
             if r.from_table == table_name
         }
         for col in self._model.columns_for(table_name):
             if col.column in fk_cols:
                 continue
-            dim_name = _friendly(col.column)
-            if dim_name in seen:
-                continue
+            dim_name = _unique_name(_friendly(col.column), seen)
             seen.add(dim_name)
             dimensions.append(
                 Dimension(
@@ -246,9 +261,8 @@ class ModelAnalyzer:
             name_prefix = "_".join(current_parts)
             expr_prefix = ".".join(current_parts)
             for col in self._model.columns_for(table_name):
-                dim_name = f"{name_prefix}_{_friendly(col.column)}"
-                if dim_name in seen:
-                    continue
+                dim_name = _unique_name(
+                    f"{name_prefix}_{_friendly(col.column)}", seen)
                 seen.add(dim_name)
                 dimensions.append(
                     Dimension(
@@ -288,7 +302,44 @@ def _unalias(alias: str, all_tables: list[str]) -> str:
 
 
 def _friendly(column_name: str) -> str:
-    """Convert a raw column name to a friendly dimension name."""
-    # Replace weird characters that might appear in PBI column names
-    s = re.sub(r"[\s\-\.]+", "_", column_name)
-    return s
+    """Convert a raw column name to a safe dimension name (lowercase snake_case)."""
+    # Replace whitespace, hyphens, dots and common PBI special chars with underscores
+    s = re.sub(r"[\s\-\./\\()#%&@!]+", "_", column_name)
+    # Remove any remaining non-alphanumeric/underscore characters
+    s = re.sub(r"[^a-zA-Z0-9_]", "", s)
+    # Collapse multiple underscores and strip leading/trailing ones
+    s = re.sub(r"_+", "_", s).strip("_")
+    return s.lower() if s else "col"
+
+
+def _unique_name(name: str, seen: set[str]) -> str:
+    """Return *name* if not in *seen*, otherwise append _2, _3, … until unique."""
+    if name not in seen:
+        return name
+    suffix = 2
+    candidate = f"{name}_{suffix}"
+    while candidate in seen:
+        suffix += 1
+        candidate = f"{name}_{suffix}"
+    return candidate
+
+
+def _find_measure_home(dax_expr: str, fact_tables: list[FactTable]) -> Optional[FactTable]:
+    """Find which fact table an orphaned DAX measure most likely belongs to.
+
+    Counts ``TableName[Col]`` references in the expression and returns the fact
+    table whose name appears most frequently.  Returns ``None`` if no match.
+    """
+    refs = re.findall(
+        r"['\"]?([A-Za-z_][\w\s]*?)['\"]?\s*\[", dax_expr, re.IGNORECASE
+    )
+    counts: dict[str, int] = {}
+    ft_map = {ft.name.lower(): ft for ft in fact_tables}
+    for ref in refs:
+        key = ref.strip().lower()
+        if key in ft_map:
+            counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return None
+    best = max(counts, key=lambda k: counts[k])
+    return ft_map[best]

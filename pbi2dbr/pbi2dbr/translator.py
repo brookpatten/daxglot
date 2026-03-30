@@ -166,8 +166,7 @@ class DaxBridge:
 
 
 def _detect_date_dimension(dax: str) -> Optional[str]:
-    """Heuristically detect the date column name from a DAX expression."""
-    # Look for patterns like 'Date'[Date], Date[OrderDate], etc.
+    """Heuristically detect the date column name from a single DAX expression."""
     m = re.search(
         r"(?:SAMEPERIODLASTYEAR|DATESYTD|DATESQTD|DATESMTD|DATEADD|PARALLELPERIOD|TOTALYTD|TOTALQTD|TOTALMTD)\s*\(\s*['\"]?[\w\s]+['\"]?\[([^\]]+)\]",
         dax,
@@ -177,6 +176,45 @@ def _detect_date_dimension(dax: str) -> Optional[str]:
         col = m.group(1).lower().replace(" ", "_")
         return col
     return None
+
+
+def _detect_date_dimension_from_measures(measures: list[PbiMeasure]) -> Optional[str]:
+    """Scan all measure expressions and return the most-referenced date column name."""
+    from collections import Counter
+    hits: Counter = Counter()
+    pattern = re.compile(
+        r"(?:SAMEPERIODLASTYEAR|DATESYTD|DATESQTD|DATESMTD|DATEADD|"
+        r"PARALLELPERIOD|TOTALYTD|TOTALQTD|TOTALMTD|PREVIOUSMONTH|PREVIOUSYEAR|"
+        r"PREVIOUSQUARTER)\s*\(\s*['\"]?[\w\s]+['\"]?\[([^\]]+)\]",
+        re.IGNORECASE,
+    )
+    for m in measures:
+        for match in pattern.finditer(m.expression):
+            col = match.group(1).lower().replace(" ", "_")
+            hits[col] += 1
+    return hits.most_common(1)[0][0] if hits else None
+
+
+def _best_date_dimension(dimensions: list[Dimension], detected_col: Optional[str]) -> str:
+    """Choose the best date dimension name from available dimensions.
+
+    Priority:
+    1. Dimension whose name exactly matches the detected column (e.g. ``order_date``).
+    2. Dimension whose expr exactly matches the detected column.
+    3. First dimension whose name contains ``date``.
+    4. Fallback: ``"date"``.
+    """
+    if detected_col:
+        for dim in dimensions:
+            if dim.name.lower() == detected_col:
+                return dim.name
+        for dim in dimensions:
+            if dim.expr.lower().replace(" ", "_") == detected_col:
+                return dim.name
+    for dim in dimensions:
+        if "date" in dim.name.lower():
+            return dim.name
+    return "date"
 
 
 def translate_fact_table(
@@ -189,12 +227,9 @@ def translate_fact_table(
     the order they should appear in the metric view (atomic measures first so
     composed measures can reference them via MEASURE()).
     """
-    # Detect primary date dimension from dimension names
-    date_dim = "date"
-    for dim in fact.dimensions:
-        if "date" in dim.name.lower() or "date" in dim.expr.lower():
-            date_dim = dim.name
-            break
+    # Detect primary date dimension from measure expressions (best match across all measures)
+    detected_col = _detect_date_dimension_from_measures(fact.measures)
+    date_dim = _best_date_dimension(fact.dimensions, detected_col)
 
     # Build period dimension registry from dimensions that truncate to a period boundary
     period_dimensions = _build_period_dimensions(fact.dimensions)

@@ -76,7 +76,7 @@ flowchart TB
     dax --> parser --> transpiler --> window
 
     %% ── YAML output ──────────────────────────────────────────────────────
-    subgraph yaml_out ["📄 sales.yaml"]
+    subgraph yaml_out ["📄 .yaml file"]
         direction TB
         y_source["source:\ndev.pbi.sales\n— or —\nSELECT … (NativeQuery SQL)"]
         y_filter["filter:\nStatus = 'Active'"]
@@ -92,7 +92,7 @@ flowchart TB
     dimcols  --> y_dims
     window   --> y_measures
 
-    yaml_out --> sql_out(["📄 sales_mv.sql\nCREATE OR REPLACE VIEW dev.pbi.sales\nWITH METRICS LANGUAGE YAML AS\n$$ sales.yaml contents $$"])
+    yaml_out --> sql_out(["📄 sales_mv.sql\nCREATE OR REPLACE VIEW dev.pbi.sales\nWITH METRICS LANGUAGE YAML AS\n$$ .yaml file contents $$"])
 ```
 
 ### 1 — Extraction

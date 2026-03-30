@@ -534,3 +534,60 @@ class TestNativeQuerySource:
         spec = gen.build_spec(fact)
         doc = pyyaml.safe_load(gen.to_yaml(spec))
         assert "filter" not in doc
+
+
+# ---------------------------------------------------------------------------
+# Date dimension best-match fix
+# ---------------------------------------------------------------------------
+
+
+class TestDateDimensionBestMatch:
+    """translate_fact_table picks the best date dimension across all measures."""
+
+    def _make_fact(self, dax_exprs, dim_names):
+        from pbi2dbr.models import PbiMeasure
+        dims = [Dimension(name, name) for name in dim_names]
+        measures = [
+            PbiMeasure("Sales", f"m{i}", expr)
+            for i, expr in enumerate(dax_exprs)
+        ]
+        return FactTable(
+            name="Sales",
+            source_table=SourceTable("Sales", uc_ref="dev.pbi.sales"),
+            dimensions=dims,
+            measures=measures,
+        )
+
+    def test_exact_name_match_preferred(self):
+        """When a dim is named exactly after the detected column, it wins."""
+        from pbi2dbr.translator import _best_date_dimension, _detect_date_dimension_from_measures
+        from pbi2dbr.models import PbiMeasure
+        measures = [PbiMeasure("S", "m", "= CALCULATE(SUM(S[x]), DATESYTD('Date'[order_date]))")]
+        detected = _detect_date_dimension_from_measures(measures)
+        assert detected == "order_date"
+        dims = [Dimension("fiscal_date", "fiscal_date"), Dimension("order_date", "order_date")]
+        assert _best_date_dimension(dims, detected) == "order_date"
+
+    def test_falls_back_to_any_date_dim(self):
+        """No exact match → first dim with 'date' in name is used."""
+        from pbi2dbr.translator import _best_date_dimension
+        dims = [Dimension("region", "region"), Dimension("calendar_date", "CalendarDate")]
+        assert _best_date_dimension(dims, None) == "calendar_date"
+
+    def test_no_date_dim_returns_fallback(self):
+        from pbi2dbr.translator import _best_date_dimension
+        dims = [Dimension("region", "Region")]
+        assert _best_date_dimension(dims, None) == "date"
+
+    def test_most_common_column_wins_when_multiple_time_intel_measures(self):
+        """With two time-intel measures referencing different columns, the more
+        common column wins."""
+        from pbi2dbr.translator import _detect_date_dimension_from_measures
+        from pbi2dbr.models import PbiMeasure
+        measures = [
+            PbiMeasure("S", "a", "= CALCULATE(SUM(S[x]), DATESYTD('Date'[order_date]))"),
+            PbiMeasure("S", "b", "= CALCULATE(SUM(S[x]), DATESYTD('Date'[order_date]))"),
+            PbiMeasure("S", "c", "= CALCULATE(SUM(S[x]), DATESYTD('Date'[ship_date]))"),
+        ]
+        detected = _detect_date_dimension_from_measures(measures)
+        assert detected == "order_date"

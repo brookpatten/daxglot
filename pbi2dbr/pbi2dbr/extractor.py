@@ -43,6 +43,25 @@ _UC_PATTERNS = [
 _NAME_NAV_RE = re.compile(
     r'\{\s*\[Name\s*=\s*["\']([^"\']+)["\']\]', re.IGNORECASE)
 
+# Alternative navigation: {[Item="value"][Kind="Table"]} (Databricks UI style)
+_ITEM_NAV_RE = re.compile(
+    r'\{\s*\[Item\s*=\s*["\']([^"\']+)["\'][^}]*Kind\s*=\s*["\']Table["\']',
+    re.IGNORECASE,
+)
+
+# Extract catalog from Databricks connector options: [Catalog="..."]
+_DATABRICKS_CATALOG_OPT_RE = re.compile(
+    r'(?:Databricks\.Catalogs|Databricks\.Query|AzureDatabricks\.Contents)'
+    r'\s*\([^)]*\[Catalog\s*=\s*["\'](?P<catalog>[^"\']+)["\']',
+    re.IGNORECASE,
+)
+
+# Sql.Database("server", "database") — second arg is catalog/database name
+_SQL_DATABASE_RE = re.compile(
+    r'Sql\.Database\s*\(["\'][^"\']*["\'],\s*["\'](?P<catalog>[^"\']+)["\']',
+    re.IGNORECASE,
+)
+
 # Table.SelectRows(source, each <predicate>) — captures the predicate part.
 _SELECT_ROWS_RE = re.compile(
     r'Table\.SelectRows\s*\([^,]+,\s*each\s+(.+?)\)',
@@ -240,26 +259,31 @@ class PbixExtractor:
     ) -> Optional[str]:
         """Try to extract a fully-qualified UC ``catalog.schema.table`` reference.
 
-        First attempts multi-step ``let`` variable navigation (the most common
-        Databricks connector pattern), then falls back to the static regex patterns.
+        Resolution order:
+        1. Multi-step ``{[Name=...]}`` let navigation (standard Databricks connector).
+        2. ``{[Item=...][Kind=Table]}`` navigation (alternative Databricks UI style).
+        3. Catalog extracted from connector options (``[Catalog=\"...\"]``) or
+           ``Sql.Database`` second argument; combined with nav steps.
+        4. Static regex patterns (NativeQuery FROM clause, quoted three-part name).
+        5. Default catalog/schema + snake_case table name.
         """
         if m_expr:
-            # --- Improvement 1: multi-step let navigation ---
-            # Collect all {[Name="..."]} navigation steps in document order.
-            # In a typical Databricks M expression the steps are:
-            #   Source = Databricks.Catalogs(...)
-            #   step1 = Source{[Name="catalog"]}
-            #   step2 = step1{[Name="schema"]}
-            #   step3 = step2{[Name="table"]}
+            # Try to extract catalog directly from the connector call
+            connector_catalog = _extract_connector_catalog(m_expr)
+            effective_catalog = connector_catalog or default_catalog
+
+            # {[Name="..."]} navigation steps (standard Databricks connector)
             nav_names = _NAME_NAV_RE.findall(m_expr)
+            # {[Item="..."][Kind="Table"]} is an alternative PBI UI pattern
+            if not nav_names:
+                nav_names = _ITEM_NAV_RE.findall(m_expr)
+
             if len(nav_names) >= 3:
-                catalog, schema, table = nav_names[0], nav_names[1], nav_names[2]
-                return f"{catalog}.{schema}.{table}"
-            if len(nav_names) == 2 and default_catalog:
-                schema, table = nav_names[0], nav_names[1]
-                return f"{default_catalog}.{schema}.{table}"
-            if len(nav_names) == 1 and default_catalog and default_schema:
-                return f"{default_catalog}.{default_schema}.{nav_names[0]}"
+                return f"{nav_names[0]}.{nav_names[1]}.{nav_names[2]}"
+            if len(nav_names) == 2 and effective_catalog:
+                return f"{effective_catalog}.{nav_names[0]}.{nav_names[1]}"
+            if len(nav_names) == 1 and effective_catalog and default_schema:
+                return f"{effective_catalog}.{default_schema}.{nav_names[0]}"
 
             # --- Fallback: static regex patterns ---
             for pattern in _UC_PATTERNS:
@@ -280,6 +304,17 @@ class PbixExtractor:
             return f"{default_catalog}.{default_schema}.{_to_snake(table_name)}"
 
         return None
+
+
+def _extract_connector_catalog(m_expr: str) -> Optional[str]:
+    """Extract a catalog name directly from a Databricks or Sql.Database connector call."""
+    m = _DATABRICKS_CATALOG_OPT_RE.search(m_expr)
+    if m:
+        return m.group("catalog")
+    m = _SQL_DATABASE_RE.search(m_expr)
+    if m:
+        return m.group("catalog")
+    return None
 
 
 def _extract_filter_expr(m_expr: str) -> Optional[str]:
