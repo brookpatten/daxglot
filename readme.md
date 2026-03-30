@@ -32,28 +32,70 @@ This writes one `.yaml` + one `_mv.sql` file per detected fact table into `./out
 ## How it works
 
 ```mermaid
-flowchart LR
-    pbix([".pbix file"])
-
-    subgraph pbi2dbr
-        direction LR
-        ext["PbixExtractor\n(pbixray)"]
-        ana["ModelAnalyzer\nfact/dim classification\njoin-tree building"]
-        gen["MetricViewGenerator"]
+flowchart TB
+    %% ── Power BI source ──────────────────────────────────────────────────
+    subgraph pbix ["📦 .pbix file"]
+        direction TB
+        pq["Power Query\nM expressions\n(source tables)"]
+        rels["Relationships\n(FK columns,\ncardinality)"]
+        cols["Column schemas\n(names + dtypes)"]
+        dax["DAX measures\n(expression text,\ndisplay folder)"]
     end
 
-    subgraph daxglot
-        bridge["DaxBridge /\ntranslate_measure\nDAX → SQL"]
+    %% ── Extraction ───────────────────────────────────────────────────────
+    subgraph ext ["PbixExtractor"]
+        direction TB
+        ucref["UC ref\nextraction\n(catalog.schema.table)"]
+        sqlext["NativeQuery\nSQL extraction"]
+        filtex["SelectRows\nfilter extraction"]
     end
 
-    out1(["sales.yaml"])
-    out2(["sales_mv.sql"])
+    pq --> ucref & sqlext & filtex
 
-    pbix --> ext --> ana --> bridge
-    ana --> gen
-    bridge --> gen
-    gen --> out1
-    gen --> out2
+    %% ── Analysis ─────────────────────────────────────────────────────────
+    subgraph ana ["ModelAnalyzer"]
+        direction TB
+        classify["Fact / dim\nclassification"]
+        jointree["Join-tree\nbuilder"]
+        dimcols["Dimension\ncolumn extraction"]
+    end
+
+    rels  --> classify & jointree
+    cols  --> dimcols
+    classify --> jointree --> dimcols
+
+    %% ── DAX translation ──────────────────────────────────────────────────
+    subgraph daxglot ["daxglot — DAX → SQL"]
+        direction TB
+        parser["Parser\n(DAX → AST)"]
+        transpiler["Transpiler\n(AST → sqlglot)"]
+        window["Window spec\nbuilder\n(time-intelligence)"]
+    end
+
+    dax --> parser --> transpiler --> window
+
+    %% ── Generation ───────────────────────────────────────────────────────
+    subgraph gen ["MetricViewGenerator"]
+        direction TB
+        src["source:\nUC ref / SQL / table name"]
+        joins_out["joins:"]
+        dims_out["dimensions:"]
+        measures_out["measures:\n+ window:"]
+    end
+
+    ucref  --> src
+    sqlext --> src
+    filtex --> src
+
+    jointree --> joins_out
+    dimcols  --> dims_out
+    window   --> measures_out
+
+    %% ── Outputs ──────────────────────────────────────────────────────────
+    yaml_out(["sales.yaml"])
+    sql_out(["sales_mv.sql\n(CREATE … WITH METRICS)"])
+
+    gen --> yaml_out --> sql_out
 ```
 
 ### 1 — Extraction
