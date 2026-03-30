@@ -329,6 +329,35 @@ class TestBuildSpec:
         spec = gen.build_spec(fact, view_name_prefix="pbi_")
         assert spec.name.startswith("pbi_")
 
+    def test_filter_expr_from_source_table_forwarded(self):
+        """filter_expr on SourceTable flows into MetricViewSpec.filter → YAML filter."""
+        import yaml as pyyaml
+
+        gen = MetricViewGenerator()
+        fact = FactTable(
+            name="Sales",
+            source_table=SourceTable(
+                "Sales", uc_ref="dev.pbi.sales", filter_expr="Status = 'Active'"
+            ),
+            dimensions=[],
+            measures=[],
+        )
+        spec = gen.build_spec(fact)
+        assert spec.filter == "Status = 'Active'"
+        doc = pyyaml.safe_load(gen.to_yaml(spec))
+        assert doc.get("filter") == "Status = 'Active'"
+
+    def test_no_filter_expr_means_no_filter_in_yaml(self):
+        """When source_table.filter_expr is None, the YAML has no filter key."""
+        import yaml as pyyaml
+
+        gen = MetricViewGenerator()
+        fact = _simple_fact()  # source_table has no filter_expr
+        spec = gen.build_spec(fact)
+        assert spec.filter is None
+        doc = pyyaml.safe_load(gen.to_yaml(spec))
+        assert "filter" not in doc
+
 
 # ---------------------------------------------------------------------------
 # _build_period_dimensions and period registry tests

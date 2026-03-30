@@ -55,6 +55,7 @@ class MetricViewGenerator:
             name=view_name,
             source=source,
             comment=f"Metric view generated from PowerBI table '{fact.name}'",
+            filter=fact.source_table.filter_expr or None,
             dimensions=fact.dimensions,
             measures=measures,
             joins=fact.joins,

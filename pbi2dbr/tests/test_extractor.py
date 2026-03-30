@@ -164,6 +164,160 @@ class TestPbixExtractorMocked:
         # Should have resolved UC ref for Sales
         assert "Sales" in model.source_tables
 
+    def test_multistep_let_three_nav_steps_resolves_uc_ref(self):
+        """Multi-step let: three {[Name=...]} navigations → catalog.schema.table."""
+        pq = [
+            (
+                "Orders",
+                'let\n'
+                '    Source = Databricks.Catalogs("adb-host"),\n'
+                '    mycatalog = Source{[Name="prod"]}[Data],\n'
+                '    myschema = mycatalog{[Name="retaildb"]}[Data],\n'
+                '    mytable = myschema{[Name="orders"]}[Data]\n'
+                'in mytable',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["Orders"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        assert model.source_tables["Orders"].uc_ref == "prod.retaildb.orders"
+
+    def test_multistep_let_two_nav_steps_uses_default_catalog(self):
+        """Two navigation steps: uses provided catalog, extracts schema + table."""
+        pq = [
+            (
+                "Sales",
+                'let\n'
+                '    Source = Databricks.Catalogs("host"),\n'
+                '    sch = Source{[Name="finance"]}[Data],\n'
+                '    tbl = sch{[Name="sales_fact"]}[Data]\n'
+                'in tbl',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["Sales"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract(source_catalog="dev")
+        assert model.source_tables["Sales"].uc_ref == "dev.finance.sales_fact"
+
+    def test_multistep_let_one_nav_step_uses_default_catalog_and_schema(self):
+        """One navigation step: fills in both catalog and schema from defaults."""
+        pq = [
+            (
+                "Customers",
+                'let Source = Databricks.Catalogs("host"),\n'
+                '    tbl = Source{[Name="customers"]}[Data]\nin tbl',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["Customers"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract(
+                source_catalog="dev", source_schema="pbi"
+            )
+        assert model.source_tables["Customers"].uc_ref == "dev.pbi.customers"
+
+    def test_select_rows_simple_equality_extracted(self):
+        """Table.SelectRows with simple equality predicate → filter_expr."""
+        pq = [
+            (
+                "ActiveSales",
+                'let\n'
+                '    Source = Databricks.Catalogs("host"),\n'
+                '    raw = Source{[Name="dev"]}[Data]{[Name="pbi"]}[Data]{[Name="sales"]}[Data],\n'
+                '    filtered = Table.SelectRows(raw, each [Status] = "Active")\n'
+                'in filtered',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["ActiveSales"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        src = model.source_tables["ActiveSales"]
+        assert src.filter_expr is not None
+        assert "Status" in src.filter_expr
+        assert "Active" in src.filter_expr
+
+    def test_select_rows_numeric_comparison(self):
+        """Table.SelectRows with numeric comparison → filter_expr."""
+        pq = [
+            (
+                "BigOrders",
+                'let Source = SomeSource,\n'
+                '    f = Table.SelectRows(Source, each [Amount] > 1000)\n'
+                'in f',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["BigOrders"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        src = model.source_tables["BigOrders"]
+        assert src.filter_expr == "Amount > 1000"
+
+    def test_select_rows_compound_and_predicate(self):
+        """Table.SelectRows with two clauses joined by 'and'."""
+        pq = [
+            (
+                "T",
+                'let f = Table.SelectRows(S, each [Region] = "West" and [Year] = 2024)\nin f',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["T"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        fe = model.source_tables["T"].filter_expr
+        assert fe is not None
+        assert "Region" in fe and "West" in fe
+        assert "AND" in fe
+        assert "Year" in fe
+
+    def test_select_rows_complex_predicate_returns_none(self):
+        """Complex predicate that can't be safely translated → filter_expr is None."""
+        pq = [
+            (
+                "T",
+                'let f = Table.SelectRows(S, each List.Contains({"A","B"}, [Col]))\nin f',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["T"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        assert model.source_tables["T"].filter_expr is None
+
+    def test_no_select_rows_filter_expr_is_none(self):
+        """M expression without Table.SelectRows → filter_expr is None."""
+        pq = [
+            (
+                "Sales",
+                'let Source = SomeConnector(), tbl = Source{[Name="sales"]}[Data] in tbl',
+            )
+        ]
+        with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
+            mock_cls.return_value = _make_mock_ray(
+                tables=["Sales"],
+                power_query=pq,
+            )
+            model = PbixExtractor(self.fake_pbix).extract()
+        assert model.source_tables["Sales"].filter_expr is None
+
     def test_extract_source_catalog_param(self):
         with patch("pbi2dbr.extractor.PBIXRay") as mock_cls:
             mock_cls.return_value = _make_mock_ray()

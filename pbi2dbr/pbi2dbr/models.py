@@ -60,6 +60,8 @@ class SourceTable:
     uc_ref: Optional[str] = None          # catalog.schema.table if resolvable
     is_calculated: bool = False           # True for DAX calculated tables
     m_expression: Optional[str] = None   # raw Power Query M expression
+    # SQL WHERE predicate extracted from Table.SelectRows
+    filter_expr: Optional[str] = None
 
 
 @dataclass
