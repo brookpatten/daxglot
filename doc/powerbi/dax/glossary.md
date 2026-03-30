@@ -1,0 +1,165 @@
+---
+layout: Conceptual
+title: DAX glossary - DAX | Microsoft Learn
+canonicalUrl: https://learn.microsoft.com/en-us/dax/dax-glossary
+feedback_system: Standard
+breadcrumb_path: /dax/breadcrumb/toc.json
+uhfHeaderId: MSDocsHeader-DAX
+ms.service: powerbi
+ms.subservice: dax
+ms.topic: glossary
+ms.author: jterh
+author: jeroenterheerdt
+recommendations: false
+ms.date: 2023-10-20T00:00:00.0000000Z
+show_latex: true
+description: Describes common terms used in the Data Analysis Expressions (DAX) language.
+locale: en-us
+document_id: 526a80af-75f6-86b7-157c-c6fadf878c0a
+document_version_independent_id: 60188e75-34d5-f607-5152-bad985901407
+updated_at: 2026-01-13T22:02:00.0000000Z
+original_content_git_url: https://github.com/MicrosoftDocs/query-docs-pr/blob/live/query-languages/dax/dax-glossary.md
+gitcommit: https://github.com/MicrosoftDocs/query-docs-pr/blob/db4161bd161a16808f41898383ed50e440b52823/query-languages/dax/dax-glossary.md
+git_commit_id: db4161bd161a16808f41898383ed50e440b52823
+site_name: Docs
+depot_name: MSDN.dax
+page_type: conceptual
+toc_rel: toc.json
+pdf_url_template: https://learn.microsoft.com/pdfstore/en-us/MSDN.dax/{branchName}{pdfName}
+feedback_product_url: ''
+feedback_help_link_type: ''
+feedback_help_link_url: ''
+word_count: 1306
+asset_id: dax-glossary
+moniker_range_name: 
+monikers: []
+item_type: Content
+source_path: query-languages/dax/dax-glossary.md
+cmProducts:
+- https://authoring-docs-microsoft.poolparty.biz/devrel/8b896464-3b7d-4e1f-84b0-9bb45aeb5f64
+- https://authoring-docs-microsoft.poolparty.biz/devrel/540ac133-a371-4dbb-8f94-28d6cc77a70b
+- https://microsoft-devrel.poolparty.biz/DevRelOfferingOntology/c6f99e62-1cf6-4b71-af9b-649b05f80cce
+spProducts:
+- https://authoring-docs-microsoft.poolparty.biz/devrel/b1d2d671-9549-46e8-918c-24349120dbf5
+- https://authoring-docs-microsoft.poolparty.biz/devrel/60bfc045-f127-4841-9d00-ea35495a5800
+- https://microsoft-devrel.poolparty.biz/DevRelOfferingOntology/3f56b378-07a9-4fa1-afe8-9889fdc77628
+platformId: 274310d5-58a2-01f8-cac6-8a959ddb3c33
+---
+
+# DAX glossary - DAX | Microsoft Learn
+
+## Analytic query
+
+Power BI visuals query a data model by using an *analytic query*. An analytic query strives to reduce potentially large data volumes and model complexities using three distinct phases: Filter, group and summarize. An analytic query is created automatically when fields are assigned to the wells of report visuals. Report authors can control the behavior of field assignments by renaming fields, modifying the summarization technique, or disabling summarization to achieve grouping. At report design time, filters can be added to the report, a report page, or a visual. In reading view, filters can be modified in the **Filters** pane, or by interactions with slicers and other visuals (cross-filtering).
+
+## BLANK
+
+DAX defines the absence of a value as BLANK. It's the equivalent of SQL NULL, but it doesn't behave exactly the same. It's more closely aligned to Excel and how it defines an empty cell. BLANK is evaluated as zero or an empty string when combined with other operations. For example, BLANK + 20 = 20. Always use capital letters; the plural is BLANKs, with a lowercase "s".
+
+## Calculated column
+
+A model calculation used to add a column to a tabular model by writing a DAX formula. The formula must return a scalar value, and it's evaluated for each row in the table. A calculated column can be added to an Import or DirectQuery storage mode table.
+
+## Calculated measure
+
+In tabular modeling, there's no such concept as a *calculated measure*. Use *measure* instead. The word *calculated* is used to describe calculated tables and calculated columns. It distinguishes them from tables and columns that originate from Power Query. Power Query doesn't have the concept of a measure.
+
+## Calculated table
+
+A model calculation used to add a table to a tabular model by writing a DAX formula. The formula must return a table object. It results in a table that uses Import storage mode.
+
+## Calculation
+
+A deliberate process that transforms one or more inputs into one or more results. In a tabular data model, a calculation can be a model object; either a calculated table, calculated column, or measure.
+
+## Context
+
+Describes the environment in which a DAX formula is evaluated. There are two types of context: *Row context* and *filter context*. Row context represents the "current row", and is used to evaluate calculated column formulas and expressions used by table iterators. Filter context is used to evaluate measures, and it represents filters applied directly to model columns and filters propagated by model relationships.
+
+## DAX
+
+Data Analysis Expressions (DAX) language is a formula language for Power Pivot in Excel, Power BI, Azure Analysis Services, and tabular modeling in SQL Server Analysis Services. You can also use DAX to add data model calculations and define row-level security (RLS) rules.
+
+## Dynamic security
+
+When row-level security (RLS) rules are enforced by using the identity of the report user. Rules filter model tables by using the user's account name, which can be done with the USERNAME or USERPRINCIPALNAME functions. See Row-level security.
+
+## Expression
+
+A unit of DAX logic that's evaluated and returns a result. Expressions can declare variables in which case they're assigned a sub-expression and must include a RETURN statement that outputs a final expression. Expressions are constructed by using model objects (tables, columns, or measures), functions, operators, or constants.
+
+## Field
+
+Data model resource presented in the **Fields** pane. Fields are used to configure report filters and visuals. Fields consist of model columns, hierarchy levels, and measures.
+
+## Formula
+
+One or more DAX expressions used to define a model calculation. Inner expressions are called sub-expressions. Plural is *formulas*.
+
+## Function
+
+DAX functions have arguments that allow passing in parameters. Formulas can use many function calls, possibly nesting functions within other functions. In a formula, function names must be followed by parentheses. Within the parentheses, parameters are passed in.
+
+## Implicit measure
+
+An automatically generated calculation achieved by configuring a Power BI visual to summarize column values. **Numeric** columns support the greatest range of summarization, including: Sum, Average, Minimum, Maximum, Count (Distinct), Count, Standard deviation, Variance, or Median. Columns of other data types can be summarized, too. **Text** columns can be summarized by using: First (alphabetically), Last (alphabetically), Count (Distinct), or Count. **Date** columns can be summarized by using: Earliest, Latest, Count (Distinct), or Count. **Boolean** columns can be summarized by using: Count (Distinct), or Count.
+
+## Iterator function
+
+A DAX function that enumerates all rows of a given table and evaluate a given expression for each row. It provides flexibility and control over how model calculations summarize data.
+
+## MDX
+
+Multidimensional Expressions (MDX) language is a formula language for SQL Server Analysis Services multidimensional models (also known as *cubes*). MDX can be used to query tabular models, however it can't define implicit measures. It can only query measures that are already defined in the model.
+
+## Measure
+
+A calculation that achieves summarization. Measures are either *implicit* or *explicit*. An explicit measure is a calculation added to a tabular data model by writing a DAX formula. A measure formula must return a scalar value. In the **Fields** pane, explicit measures are adorned with a calculator icon. Explicit measures are required when the model is queried by using Multidimensional Expressions (MDX), as is the case when using Analyze in Excel. An explicit measure is commonly just called a measure.
+
+## Measure group
+
+A model table that contains at least one measure, and has no hierarchies or visible columns. In the **Fields** pane, each measure group is adorned with a multi-calculator icon. Measure groups are listed together at the top of the **Fields** pane, and sorted alphabetically by name.
+
+## Model calculation
+
+A named formula that's used to add a calculated table, calculated column, or measure to a tabular data model. Its structure is `NAME` = `FORMULA`. Most calculations are added by data modelers in Power BI Desktop, but measures can also be added to a live connection report. See Report measures.
+
+## Quick measures
+
+A feature in Power BI Desktop that eliminates the need to write DAX formulas for commonly defined measures. Quick measures include average per category, rank, and difference from baseline.
+
+## Report measures
+
+Also called *report-level measures*. They're added to a live connection report in Power BI Desktop by writing a DAX formula, but only for connections to Power BI models or Analysis Services tabular models.
+
+## Row-level security
+
+Also called `RLS`. Design technique to restrict access to subsets of data for specific users. In a tabular model, it's achieved by creating model roles. Roles have rules, which are DAX expressions to filter table rows.
+
+## Scalar
+
+In DAX, a scalar is a single value. A scalar can be of any data type: Decimal, Integer, DateTime, String, Currency, Boolean. A scalar value can be the result of an expression calculated from multiple values. For example, an aggregation function such as MAX() returns a single maximum value from a set of values from which to evaluate.
+
+## Summarization
+
+An operation applied to the values of a column. See measure.
+
+## Time intelligence
+
+Time intelligence relates to calculations over time, like year-to-date (YTD).
+
+## Time intelligence function
+
+DAX includes many time intelligence functions. Each time intelligence function achieves its result by modifying the filter context for date filters. Example functions: TOTALYTD and SAMEPERIODLASTYEAR.
+
+## User-defined function
+
+A user-created DAX function. Provides the ability to define named functions with parameters for use in any DAX expression. UDFs promote code reuse and simply model maintenance by centralizing logic. Functions are defined in DAX Query View or TMDL View and can include parameter types for validation. This is currently in preview. To learn more, see [DAX user-defined functions (preview)](best-practices/dax-user-defined-functions).
+
+## Value, values
+
+Data to be visualized.
+
+## What-if parameter
+
+A Power BI Desktop feature that provides the ability to accept user input through slicers. Each parameter creates a single-column calculated table and a measure that returns a single-selected value. The measure can be used in model calculations to respond to the user's input.

@@ -354,37 +354,117 @@ class DaxToSqlTranspiler:
         return exp.If(this=condition, true=true_val, false=false_val)
 
     def _visit_IfError(self, node: IfError) -> exp.Expression:
+        """IFERROR(value, alt) → COALESCE(value, alt).
+
+        Not semantically identical — COALESCE catches NULL, not arbitrary errors.
+        However, when combined with DIVIDE() (which emits NULLIF(den, 0)) this
+        correctly handles the most common divide-by-zero pattern.
+        """
         value = self.transpile(node.value)
         alt = self.transpile(node.value_if_error)
-        # Most dialects: IIF / CASE WHEN … is the equivalent; use Anonymous here.
-        return exp.Anonymous(this="IFERROR", expressions=[value, alt])
+        return exp.Coalesce(this=value, expressions=[alt])
 
     def _visit_SwitchExpr(self, node: SwitchExpr) -> exp.Expression:
-        """SWITCH → CASE WHEN … THEN … ELSE … END"""
-        switch_val = self.transpile(node.expr)
+        """SWITCH → CASE WHEN … THEN … ELSE … END.
+
+        Handles the common SWITCH(TRUE(), cond1, val1, ...) idiom used as an
+        if-elseif chain: when the switch expression is the literal TRUE, the
+        WHEN conditions are used directly rather than compared to TRUE.
+        """
+        is_switch_true = (
+            isinstance(node.expr, Literal)
+            and node.expr.kind == "BOOLEAN"
+            and node.expr.value is True
+        )
+        if not is_switch_true:
+            switch_val = self.transpile(node.expr)
         ifs: list[exp.When] = []
         for case in node.cases:
-            ifs.append(
-                exp.When(
-                    this=exp.EQ(
-                        this=switch_val.copy(),
-                        expression=self.transpile(case.when),
-                    ),
-                    then=self.transpile(case.then),
+            if is_switch_true:
+                condition = self.transpile(case.when)
+            else:
+                condition = exp.EQ(
+                    this=switch_val.copy(),  # type: ignore[possibly-undefined]
+                    expression=self.transpile(case.when),
                 )
-            )
+            ifs.append(exp.When(this=condition, then=self.transpile(case.then)))
         default = self.transpile(node.default) if node.default else exp.Null()
-        return exp.Case(
-            ifs=ifs,
-            default=default,
-        )
+        return exp.Case(ifs=ifs, default=default)
 
     # ------------------------------------------------------------------
     # Generic function call
     # ------------------------------------------------------------------
 
-    def _visit_FunctionCall(self, node: FunctionCall) -> exp.Expression:
+    def _visit_FunctionCall(self, node: FunctionCall) -> exp.Expression:  # noqa: C901
         args = [self.transpile(a) for a in node.args]
+        fname = node.name.upper()
+
+        # DIVIDE(numerator, denominator [, alternate_result])
+        # → numerator / NULLIF(denominator, 0)
+        # → COALESCE(numerator / NULLIF(denominator, 0), alternate_result)  [3-arg form]
+        if fname == "DIVIDE" and len(args) >= 2:
+            safe_den = exp.Anonymous(
+                this="NULLIF", expressions=[args[1], exp.Literal.number(0)]
+            )
+            safe_div = exp.Div(this=args[0], expression=safe_den)
+            if len(args) >= 3:
+                return exp.Coalesce(this=safe_div, expressions=[args[2]])
+            return safe_div
+
+        # ISBLANK(expr) → expr IS NULL
+        if fname == "ISBLANK" and len(args) == 1:
+            return exp.Is(this=args[0], expression=exp.Null())
+
+        # ISEMPTY(table) → (COUNT(*) = 0) — best effort approximation
+        if fname == "ISEMPTY" and len(args) == 1:
+            return exp.EQ(
+                this=exp.Count(this=exp.Star()),
+                expression=exp.Literal.number(0),
+            )
+
+        # COALESCE(a, b, ...) → standard SQL COALESCE
+        if fname == "COALESCE" and args:
+            return exp.Coalesce(this=args[0], expressions=args[1:])
+
+        # TODAY() → CURRENT_DATE
+        if fname == "TODAY":
+            return exp.CurrentDate()
+
+        # NOW() → CURRENT_TIMESTAMP
+        if fname == "NOW":
+            return exp.CurrentTimestamp()
+
+        # LEN(text) → LENGTH(text)
+        if fname == "LEN" and len(args) == 1:
+            return exp.Length(this=args[0])
+
+        # CONCATENATE(a, b) → CONCAT(a, b)
+        if fname == "CONCATENATE":
+            return exp.Anonymous(this="CONCAT", expressions=args)
+
+        # SELECTEDVALUE(col [, default]) → ANY_VALUE(col)
+        # (filter-context dependent in DAX; ANY_VALUE is the closest SQL aggregate)
+        if fname == "SELECTEDVALUE" and args:
+            return exp.Anonymous(this="ANY_VALUE", expressions=[args[0]])
+
+        # HASONEVALUE / HASONEFILTER → COUNT(DISTINCT col) = 1
+        if fname in ("HASONEVALUE", "HASONEFILTER") and len(args) == 1:
+            cnt = exp.Count(this=exp.Distinct(expressions=[args[0]]))
+            return exp.EQ(this=cnt, expression=exp.Literal.number(1))
+
+        # INT / INTEGER → CAST(expr AS BIGINT)
+        if fname in ("INT", "INTEGER") and len(args) == 1:
+            return exp.Cast(this=args[0], to=exp.DataType.build("BIGINT"))
+
+        # TRIM → standard SQL TRIM
+        if fname == "TRIM" and len(args) == 1:
+            return exp.Trim(this=args[0])
+
+        # UPPER / LOWER → pass-through (identical in SQL)
+        if fname in ("UPPER", "LOWER") and len(args) == 1:
+            cls = exp.Upper if fname == "UPPER" else exp.Lower
+            return cls(this=args[0])
+
         return exp.Anonymous(this=node.name, expressions=args)
 
     # ------------------------------------------------------------------

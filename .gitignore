@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+*.whl
+*.tar.gz
+MANIFEST
+
+# uv
+.venv/
+.uv/
+
+# Virtual environments
+venv/
+env/
+.env
+.envrc
+
+# pytest / coverage
+.pytest_cache/
+.cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Type checkers
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+
+# Editors
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Generated output
+output/

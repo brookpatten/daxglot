@@ -1,29 +1,24 @@
-[tool.poetry]
+[project]
 name = "daxglot"
 version = "0"
 description = ""
-authors = ["Brook Patten <brook.patten@gmail.com>"]
+authors = [{ name = "Brook Patten", email = "brook.patten@gmail.com" }]
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-sqlglot="*"
+requires-python = ">=3.10"
+dependencies = ["sqlglot"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-# [[tool.poetry.source]]
-# name = "pypi"
-# url = "url"
-# priority = "explicit"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.2.2"
-isort = "^5.13.2"
-black = "^24.3.0"
-sqlfluff = "^3.0.5"
-pre-commit = "^3.7.1"
+[dependency-groups]
+dev = [
+    "pytest>=8.2.2",
+    "isort>=5.13.2",
+    "black>=24.3.0",
+    "sqlfluff>=3.0.5",
+    "pre-commit>=3.7.1",
+]
 
 [tool.sqlfluff.core]
 templater = "placeholder"

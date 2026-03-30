@@ -53,6 +53,7 @@ from .ast_nodes import (
     VarBlock,
     VarDef,
 )
+from .measure_translator import MeasureTranslation, WindowSpec, translate_measure
 from .parser import DaxParser, ParseError, parse_dax
 from .transpiler import DaxToSqlTranspiler, TranspilerError, dax_to_sql
 
@@ -100,4 +101,8 @@ __all__ = [
     "Literal",
     "OrderBy",
     "OrderByItem",
+    # Measure translation
+    "translate_measure",
+    "MeasureTranslation",
+    "WindowSpec",
 ]

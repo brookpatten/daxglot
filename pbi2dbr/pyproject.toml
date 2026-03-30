@@ -1,0 +1,21 @@
+[project]
+name = "pbi2dbr"
+version = "0.1.0"
+description = "Convert PowerBI semantic models (PBIX) to Databricks Unity Catalog metric views"
+authors = [{ name = "Brook Patten", email = "brook.patten@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["daxglot", "pbixray", "pyyaml", "click>=8.0", "pandas"]
+
+[project.scripts]
+pbi2dbr = "pbi2dbr.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+daxglot = { path = "../", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8.2.2"]
