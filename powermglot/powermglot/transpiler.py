@@ -817,6 +817,86 @@ def _m_func_to_sql(fname: str, args: List[MExpr]) -> Optional[exp.Expression]:
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class MSourceInfo:
+    """Information extracted from a Power Query M expression.
+
+    Returned by :func:`parse_m_source`.  All fields default to ``None``;
+    populate only what could be extracted.
+    """
+
+    source_ref: Optional[str] = None
+    """Dot-separated table reference (e.g. ``catalog.schema.table``) from
+    connector navigation.  ``None`` when the source is a native SQL query or
+    could not be resolved."""
+
+    native_sql: Optional[str] = None
+    """Raw SQL text from a ``Value.NativeQuery`` call.  Mutually exclusive
+    with :attr:`source_ref`."""
+
+    filter_sql: Optional[str] = None
+    """SQL WHERE predicate extracted from ``Table.SelectRows``.  ``None``
+    when there is no filter or the predicate is too complex to translate."""
+
+
+def parse_m_source(m_text: str) -> MSourceInfo:
+    """Parse a Power Query M expression and extract source/filter information.
+
+    This entry point is intended for use by data-source extractors (e.g.
+    ``pbi2dbr``).  It **never raises** — any parse or transpile error causes
+    an empty :class:`MSourceInfo` to be returned silently, allowing callers
+    to fall back to their own logic.
+
+    Args:
+        m_text: The raw M source text to parse (typically a ``let … in``
+            expression).
+
+    Returns:
+        An :class:`MSourceInfo` instance with as much information as could be
+        extracted.  Fields that could not be resolved are ``None``.
+
+    Example::
+
+        info = parse_m_source('''
+            let
+                Source = Databricks.Catalogs("host", "443", [Catalog="prod"]),
+                db = Source{[Name="pbi"]}[Data],
+                tbl = db{[Name="orders"]}[Data],
+                filtered = Table.SelectRows(tbl, each [status] = "Active")
+            in filtered
+        ''')
+        # info.source_ref  == "prod.pbi.orders"
+        # info.filter_sql  == "status = 'Active'"
+        # info.native_sql  is None
+    """
+    try:
+        ast = parse_m(m_text)
+        if not isinstance(ast, LetExpr):
+            return MSourceInfo()
+
+        transpiler = MToSqlTranspiler()
+        env: Dict[str, MExpr] = {name: expr for name, expr in ast.bindings}
+        state = _QueryState()
+        transpiler._resolve(ast.result, env, state)
+
+        if state.from_is_sql:
+            return MSourceInfo(native_sql=state.from_source)
+
+        filter_sql: Optional[str] = None
+        if state.where_clauses:
+            where_expr: exp.Expression = state.where_clauses[0]
+            for clause in state.where_clauses[1:]:
+                where_expr = exp.And(this=where_expr, expression=clause)
+            filter_sql = where_expr.sql()
+
+        return MSourceInfo(
+            source_ref=state.from_source or None,
+            filter_sql=filter_sql,
+        )
+    except Exception:  # noqa: BLE001
+        return MSourceInfo()
+
+
 def m_to_sql(m_expr: str, dialect: Optional[str] = None) -> str:
     """Parse a Power Query M expression and return a SQL string.
 

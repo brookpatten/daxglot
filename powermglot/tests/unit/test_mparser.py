@@ -519,3 +519,168 @@ class TestTranspiler:
         """
         sql = self.sql(m)
         assert "JOIN" in sql.upper()
+
+
+# ===========================================================================
+# parse_m_source tests
+# ===========================================================================
+
+
+@pytest.mark.unit
+class TestParseMSource:
+    """Tests for the parse_m_source convenience function."""
+
+    def info(self, m_text: str):
+        from powermglot import parse_m_source
+        return parse_m_source(m_text)
+
+    # ------------------------------------------------------------------
+    # source_ref extraction
+    # ------------------------------------------------------------------
+
+    def test_three_level_nav_catalog_option(self):
+        m = """
+        let
+            Source = Databricks.Catalogs("host", "443", [Catalog="prod"]),
+            db = Source{[Name="pbi"]}[Data],
+            tbl = db{[Name="orders"]}[Data]
+        in tbl
+        """
+        i = self.info(m)
+        assert i.source_ref == "prod.pbi.orders"
+        assert i.native_sql is None
+        assert i.filter_sql is None
+
+    def test_three_level_nav_no_catalog(self):
+        m = """
+        let
+            Source = Databricks.Catalogs("host"),
+            cat = Source{[Name="prod"]}[Data],
+            sch = cat{[Name="retaildb"]}[Data],
+            tbl = sch{[Name="orders"]}[Data]
+        in tbl
+        """
+        i = self.info(m)
+        assert i.source_ref == "prod.retaildb.orders"
+
+    def test_two_level_nav_no_catalog(self):
+        m = """
+        let
+            Source = Databricks.Catalogs("host"),
+            sch = Source{[Name="finance"]}[Data],
+            tbl = sch{[Name="sales_fact"]}[Data]
+        in tbl
+        """
+        i = self.info(m)
+        assert i.source_ref == "finance.sales_fact"
+
+    def test_sql_database_connector(self):
+        m = (
+            'let Source = Sql.Database("server", "prod"), '
+            'db = Source{[Name="pbi"]}[Data], '
+            'tbl = db{[Name="orders"]}[Data] in tbl'
+        )
+        i = self.info(m)
+        assert i.source_ref == "prod.pbi.orders"
+
+    def test_unknown_connector_gives_table_only(self):
+        m = 'let src = CustomConnector("host"), t = src{[Name="orders"]}[Data] in t'
+        i = self.info(m)
+        assert i.source_ref == "orders"
+
+    # ------------------------------------------------------------------
+    # native_sql extraction
+    # ------------------------------------------------------------------
+
+    def test_native_query_returns_native_sql(self):
+        m = 'let q = Value.NativeQuery(src, "SELECT id FROM prod.pbi.orders") in q'
+        i = self.info(m)
+        assert i.native_sql == "SELECT id FROM prod.pbi.orders"
+        assert i.source_ref is None
+
+    def test_native_query_escaped_quotes(self):
+        m = 'let q = Value.NativeQuery(src, "SELECT ""col"" FROM t") in q'
+        i = self.info(m)
+        assert i.native_sql == 'SELECT "col" FROM t'
+
+    def test_native_query_case_insensitive(self):
+        m = 'let q = value.nativequery(src, "SELECT 1") in q'
+        i = self.info(m)
+        assert i.native_sql == "SELECT 1"
+
+    def test_no_native_query_returns_none(self):
+        m = 'let Source = Databricks.Catalogs("host"), nav = Source{[Name="t"]}[Data] in nav'
+        i = self.info(m)
+        assert i.native_sql is None
+
+    # ------------------------------------------------------------------
+    # filter_sql extraction
+    # ------------------------------------------------------------------
+
+    def test_select_rows_equality_filter(self):
+        m = """
+        let
+            Source = Databricks.Catalogs("host", "443", [Catalog="prod"]),
+            db = Source{[Name="pbi"]}[Data],
+            tbl = db{[Name="orders"]}[Data],
+            filtered = Table.SelectRows(tbl, each [status] = "Active")
+        in filtered
+        """
+        i = self.info(m)
+        assert i.filter_sql is not None
+        assert "status" in i.filter_sql.lower()
+        assert "Active" in i.filter_sql
+
+    def test_select_rows_numeric_comparison(self):
+        m = 'let f = Table.SelectRows(S, each [Amount] > 1000)\nin f'
+        i = self.info(m)
+        assert i.filter_sql == "Amount > 1000"
+
+    def test_select_rows_compound_and(self):
+        m = 'let f = Table.SelectRows(S, each [Region] = "West" and [Year] = 2024)\nin f'
+        i = self.info(m)
+        assert i.filter_sql is not None
+        assert "AND" in i.filter_sql
+        assert "Region" in i.filter_sql
+
+    def test_select_rows_complex_predicate_returns_none(self):
+        m = 'let f = Table.SelectRows(S, each List.Contains({"A","B"}, [Col]))\nin f'
+        i = self.info(m)
+        assert i.filter_sql is None
+
+    def test_no_select_rows_filter_is_none(self):
+        m = 'let Source = SomeConnector(), tbl = Source{[Name="sales"]}[Data] in tbl'
+        i = self.info(m)
+        assert i.filter_sql is None
+
+    # ------------------------------------------------------------------
+    # Error resilience
+    # ------------------------------------------------------------------
+
+    def test_invalid_m_returns_empty_info(self):
+        """Any parse error must return an empty MSourceInfo, never raise."""
+        from powermglot import MSourceInfo
+        i = self.info("this is not valid M syntax !!@@##")
+        assert isinstance(i, MSourceInfo)
+        assert i.source_ref is None
+        assert i.native_sql is None
+        assert i.filter_sql is None
+
+    def test_non_let_expression_returns_empty_info(self):
+        i = self.info('"just a string"')
+        assert i.source_ref is None
+
+    def test_combined_source_and_filter(self):
+        m = """
+        let
+            Source = Databricks.Catalogs("host", "443", [Catalog="prod"]),
+            db = Source{[Name="pbi"]}[Data],
+            tbl = db{[Name="orders"]}[Data],
+            filtered = Table.SelectRows(tbl, each [year] >= 2023)
+        in filtered
+        """
+        i = self.info(m)
+        assert i.source_ref == "prod.pbi.orders"
+        assert i.filter_sql is not None
+        assert "2023" in i.filter_sql
+        assert i.native_sql is None

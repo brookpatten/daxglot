@@ -754,6 +754,7 @@ dependencies = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pbixray" },
+    { name = "powermglot" },
     { name = "pyyaml" },
 ]
 
@@ -768,6 +769,7 @@ requires-dist = [
     { name = "daxglot", editable = "daxglot" },
     { name = "pandas" },
     { name = "pbixray" },
+    { name = "powermglot", editable = "powermglot" },
     { name = "pyyaml" },
 ]
 

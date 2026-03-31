@@ -39,14 +39,16 @@ from .ast_nodes import (
 )
 from .lexer import LexError, Lexer, Token, TokenType
 from .parser import MParser, ParseError, parse_m
-from .transpiler import MToSqlTranspiler, TranspilerError, m_to_sql
+from .transpiler import MToSqlTranspiler, MSourceInfo, TranspilerError, m_to_sql, parse_m_source
 
 __all__ = [
     # Entry points
     "parse_m",
     "m_to_sql",
+    "parse_m_source",
     # Transpiler
     "MToSqlTranspiler",
+    "MSourceInfo",
     "TranspilerError",
     # Parser
     "MParser",
