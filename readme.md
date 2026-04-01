@@ -10,8 +10,7 @@ The project is split into two packages:
 |---------|---------|
 | `daxglot` | DAX lexer, parser, AST, and SQL transpiler (dialect-aware via [sqlglot](https://github.com/tobymao/sqlglot)) |
 | `powermglot` | Power Query M parser and SQL transpiler; exposes `parse_m_source` to extract Unity Catalog table references and filter predicates from M `let…in` expressions |
-| `pbi2dbr` | CLI + library that extracts a PBIX model, classifies fact/dimension tables, translates DAX measures to SQL, and emits metric-view YAML and DDL |
-
+| `pbi2dbr` | CLI + library that extracts a PBIX model, classifies fact/dimension tables, translates DAX measures to SQL, and emits metric-view YAML and DDL || `measurediff` | Collects metric view measure definitions from Databricks Unity Catalog (with recursive column lineage) and compares them to identify what is the same, different, or equivalent |
 ---
 
 ## Quick start
@@ -454,7 +453,108 @@ pbi2dbr/tests/
   test_extractor.py
   test_generator.py
   test_integration.py     # end-to-end tests against real .pbix files
+
+measurediff/              # Unity Catalog metric view collection + diffing
+  measurediff/
+    models.py             # LineageColumn, MeasureDefinition, MetricViewDefinition, …
+    collector.py          # discover metric views + fetch DDL via Spark
+    extractor.py          # parse metric view DDL and SQL expressions (no Spark)
+    lineage.py            # recursive lineage enrichment from system.access.column_lineage
+    serializer.py         # write per-measure YAML files
+    loader.py             # read per-measure YAML files back into models
+    comparator.py         # expression / window / lineage comparison + similarity score
+    display.py            # rich terminal diff renderer
+    cli.py                # `measurediff collect` / `measurediff diff` commands
+  tests/unit/
+    test_extractor.py
+    test_models.py
+    test_serializer.py
+    test_comparator.py
 ```
+
+---
+
+## measurediff
+
+`measurediff` has two responsibilities: **collecting** measure definitions from live Databricks metric views (enriched with recursive column lineage from `system.access.column_lineage`), and **diffing** any two collected measures to understand how similar or different they are.
+
+### Collect
+
+Discovers metric views, parses their YAML definitions, traverses upstream column lineage, and writes one YAML file per measure.
+
+```bash
+# Collect all metric views in a catalog/schema (with lineage)
+measurediff collect --catalog prod --schema finance -o ./definitions
+
+# Skip lineage for speed
+measurediff collect --catalog prod --schema finance --no-lineage -o ./definitions
+```
+
+Each output file is named `{catalog}.{schema}.{view}.{measure}.yaml` and contains the measure expression, optional window specs, and a recursive lineage tree showing how every referenced column flows from its ultimate source table:
+
+```yaml
+metric_view: prod.finance.sales_metrics
+name: Monthly_Sales
+expr: SUM(source.total)
+window:
+  - order: date
+    range: trailing 1 months
+    semiadditive: last
+lineage:
+  - table: prod.finance.sales
+    column: total
+    type: UNKNOWN
+    upstream:
+      - table: prod.raw.orders
+        column: total
+        type: TABLE
+```
+
+### Diff
+
+Compares two collected measure files across three dimensions:
+
+| Dimension | Weight | How it's measured |
+|-----------|--------|--------------------|
+| **Expression** | 50% | SQL expressions are normalized (table qualifiers stripped via sqlglot) before comparison |
+| **Window specs** | 20% | Each window field (`order`, `range`, `semiadditive`) compared independently |
+| **Lineage** | 30% | Jaccard similarity of ultimate *leaf* source columns; intermediate hops are flagged separately rather than penalised |
+
+A weighted score produces one of three labels: **Identical** (≥ 98%), **Similar** (≥ 60%), or **Different** (< 60%).
+
+```bash
+measurediff diff \
+  playground.bravo.country_sales.Monthly_Sales.yaml \
+  playground.charlie.alphasales.MonthSales.yaml
+```
+
+```
+╭──────────────────────────── Measure Diff ────────────────────────────╮
+│ A                                   B                                │
+│ playground.bravo.country_sales      playground.charlie.alphasales    │
+│ Monthly_Sales                       MonthSales                       │
+╰──────────────────────────────────────────────────────────────────────╯
+╭── Similarity ──╮
+│ Similar  93.3% │
+╰────────────────╯
+╭─────────────────── Expression  ✓ ───────────────────╮
+│ SUM(source.total)                                   │
+╰─────────────────────────────────────────────────────╯
+╭─────────────────── Window  ✗ ───────────────────────╮
+│  Spec  Field         A                  B        ✓/✗ │
+│  [0]   order         date               date      ✓  │
+│  [0]   range         trailing 1 months  trailing  ✗  │
+│                                         30 days      │
+│  [0]   semiadditive  last               last      ✓  │
+╰─────────────────────────────────────────────────────╯
+╭─────────────── Lineage (leaf sources)  ✓ ───────────╮
+│  Source                   Column  In A  In B         │
+│  playground.alpha.sales   total    ✓     ✓           │
+│  ⚠ A has extra intermediate hops                    │
+╰─────────────────────────────────────────────────────╯
+```
+
+The extra-hop warning means `Monthly_Sales` routes through `playground.bravo.sales` on its way to the same ultimate source — functionally equivalent, but the lineage path is longer.
 
 ---
 
