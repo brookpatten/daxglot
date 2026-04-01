@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["daxglot", "pbi2dbr", "powermglot"]
+members = ["daxglot", "measurediff", "pbi2dbr", "powermglot"]
 
 [tool.isort]
 profile = "black"
