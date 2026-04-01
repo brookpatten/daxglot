@@ -10,6 +10,7 @@ from typing import Optional
 import click
 
 from .analyzer import AnalysisOptions, ModelAnalyzer
+from . import console
 from .extractor import PbixExtractor
 from .generator import MetricViewGenerator
 
@@ -87,6 +88,7 @@ def convert(  # noqa: PLR0913
     dialect: str,
 ) -> None:
     """Convert a PBIX file to Databricks metric view YAML and SQL DDL files."""
+    console.enabled = True
     click.echo(f"Extracting model from {pbix} …")
     try:
         extractor = PbixExtractor(pbix)

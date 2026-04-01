@@ -11,6 +11,8 @@ from .models import ColumnSchema, PbiMeasure, Relationship, SemanticModel, Sourc
 from pbixray import PBIXRay  # type: ignore[import]
 from powermglot import MSourceInfo, parse_m_source
 
+from . import console
+
 # Patterns for resolving Unity Catalog references from Power Query M expressions
 _UC_PATTERNS = [
     # DatabricksCatalog.Contents("catalog")[Schema][Table]
@@ -244,6 +246,9 @@ class PbixExtractor:
                 filter_expr=filter_expr,
                 source_sql=source_sql,
             )
+            if m_expr:
+                console.show_m_resolution(
+                    table, uc_ref, filter_expr, source_sql)
 
         return model
 
