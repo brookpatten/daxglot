@@ -1,0 +1,23 @@
+[project]
+name = "powermglot"
+version = "0.1.0"
+description = "Power Query M parser and SQL transpiler using sqlglot"
+authors = [{ name = "Brook Patten", email = "brook.patten@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["sqlglot"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8.2.2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: fast unit tests",
+    "integration: integration tests",
+]

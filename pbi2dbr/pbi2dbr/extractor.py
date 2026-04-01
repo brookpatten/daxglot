@@ -9,6 +9,9 @@ from typing import Optional
 from .models import ColumnSchema, PbiMeasure, Relationship, SemanticModel, SourceTable
 
 from pbixray import PBIXRay  # type: ignore[import]
+from powermglot import MSourceInfo, parse_m_source
+
+from . import console
 
 # Patterns for resolving Unity Catalog references from Power Query M expressions
 _UC_PATTERNS = [
@@ -243,6 +246,9 @@ class PbixExtractor:
                 filter_expr=filter_expr,
                 source_sql=source_sql,
             )
+            if m_expr:
+                console.show_m_resolution(
+                    table, uc_ref, filter_expr, source_sql)
 
         return model
 
@@ -260,21 +266,29 @@ class PbixExtractor:
         """Try to extract a fully-qualified UC ``catalog.schema.table`` reference.
 
         Resolution order:
-        1. Multi-step ``{[Name=...]}`` let navigation (standard Databricks connector).
-        2. ``{[Item=...][Kind=Table]}`` navigation (alternative Databricks UI style).
-        3. Catalog extracted from connector options (``[Catalog=\"...\"]``) or
-           ``Sql.Database`` second argument; combined with nav steps.
-        4. Static regex patterns (NativeQuery FROM clause, quoted three-part name).
-        5. Default catalog/schema + snake_case table name.
+        1. **powermglot** M parser — handles ``let``-chain navigation and
+           connector options (Databricks, Sql.Database, etc.).
+        2. Regex fallback for patterns the powermglot parser cannot handle
+           (e.g. ``{[Item=…][Kind=Table]}`` navigation style).
+        3. Default catalog/schema + snake_case table name.
         """
         if m_expr:
-            # Try to extract catalog directly from the connector call
+            # 1. powermglot — primary resolution path
+            info: MSourceInfo = parse_m_source(m_expr)
+            if info.source_ref:
+                parts = info.source_ref.split(".")
+                if len(parts) >= 3:
+                    return info.source_ref
+                if len(parts) == 2 and default_catalog:
+                    return f"{default_catalog}.{info.source_ref}"
+                if len(parts) == 1 and default_catalog and default_schema:
+                    return f"{default_catalog}.{default_schema}.{info.source_ref}"
+
+            # 2. Regex fallback (handles patterns powermglot cannot parse)
             connector_catalog = _extract_connector_catalog(m_expr)
             effective_catalog = connector_catalog or default_catalog
 
-            # {[Name="..."]} navigation steps (standard Databricks connector)
             nav_names = _NAME_NAV_RE.findall(m_expr)
-            # {[Item="..."][Kind="Table"]} is an alternative PBI UI pattern
             if not nav_names:
                 nav_names = _ITEM_NAV_RE.findall(m_expr)
 
@@ -285,7 +299,6 @@ class PbixExtractor:
             if len(nav_names) == 1 and effective_catalog and default_schema:
                 return f"{effective_catalog}.{default_schema}.{nav_names[0]}"
 
-            # --- Fallback: static regex patterns ---
             for pattern in _UC_PATTERNS:
                 m = pattern.search(m_expr)
                 if m:
@@ -299,7 +312,7 @@ class PbixExtractor:
                         snake = _to_snake(table_name)
                         return f"{catalog}.{default_schema}.{snake}"
 
-        # Fallback: construct from provided defaults
+        # 3. Fallback: construct from provided defaults
         if default_catalog and default_schema:
             return f"{default_catalog}.{default_schema}.{_to_snake(table_name)}"
 
@@ -320,14 +333,18 @@ def _extract_connector_catalog(m_expr: str) -> Optional[str]:
 def _extract_filter_expr(m_expr: str) -> Optional[str]:
     """Extract a SQL WHERE predicate from a ``Table.SelectRows`` call in an M expression.
 
-    Only simple equality/comparison predicates on record fields are supported,
-    e.g. ``Table.SelectRows(Source, each [Status] = "Active")``
-    → ``Status = 'Active'``.
+    Tries the powermglot parser first; falls back to a regex-based approach
+    for M expressions that powermglot cannot parse.
 
-    Compound predicates joined by ``and``/``or`` are handled when every
-    individual clause is simple.  Returns ``None`` when the predicate is
-    too complex to translate safely.
+    Returns ``None`` when there is no ``Table.SelectRows`` call or the
+    predicate is too complex to translate safely.
     """
+    # 1. powermglot — handles nested let chains and complex expressions
+    info: MSourceInfo = parse_m_source(m_expr)
+    if info.filter_sql is not None:
+        return info.filter_sql
+
+    # 2. Regex fallback
     m = _SELECT_ROWS_RE.search(m_expr)
     if not m:
         return None
@@ -369,6 +386,8 @@ def _to_snake(name: str) -> str:
 def _extract_native_query_sql(m_expr: str) -> Optional[str]:
     """Extract the SQL text from a ``Value.NativeQuery`` call in an M expression.
 
+    Tries the powermglot parser first; falls back to a regex-based approach.
+
     Returns the SQL string normalised to strip M-style escaped double-quote
     pairs (``""`` → ``"``).  Returns ``None`` if no ``Value.NativeQuery``
     pattern is found.
@@ -384,6 +403,12 @@ def _extract_native_query_sql(m_expr: str) -> Optional[str]:
 
         → "SELECT o.id, c.region\\n    FROM prod.pbi.orders o\\n    ..."
     """
+    # 1. powermglot — handles let-chain bindings natively
+    info: MSourceInfo = parse_m_source(m_expr)
+    if info.native_sql is not None:
+        return info.native_sql
+
+    # 2. Regex fallback
     m = _NATIVE_QUERY_RE.search(m_expr)
     if not m:
         return None

@@ -5,7 +5,7 @@ description = "Convert PowerBI semantic models (PBIX) to Databricks Unity Catalo
 authors = [{ name = "Brook Patten", email = "brook.patten@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["daxglot", "pbixray", "pyyaml", "click>=8.0", "pandas"]
+dependencies = ["daxglot", "powermglot", "pbixray", "pyyaml", "click>=8.0", "pandas"]
 
 [project.scripts]
 pbi2dbr = "pbi2dbr.cli:main"
@@ -16,6 +16,7 @@ build-backend = "hatchling.build"
 
 [tool.uv.sources]
 daxglot = { workspace = true }
+powermglot = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8.2.2"]

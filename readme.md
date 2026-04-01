@@ -1,12 +1,15 @@
 # daxglot / pbi2dbr
 
-A toolkit for converting **PowerBI semantic models** (`.pbix` files) into **Databricks Unity Catalog metric views**.
+A library/cli for converting **PowerBI semantic models** (`.pbix` files) into **Databricks Unity Catalog metric views**.
+
+"Couldn't I just do that with an LLM?".  Yes, you could.
 
 The project is split into two packages:
 
 | Package | Purpose |
 |---------|---------|
 | `daxglot` | DAX lexer, parser, AST, and SQL transpiler (dialect-aware via [sqlglot](https://github.com/tobymao/sqlglot)) |
+| `powermglot` | Power Query M parser and SQL transpiler; exposes `parse_m_source` to extract Unity Catalog table references and filter predicates from M `let…in` expressions |
 | `pbi2dbr` | CLI + library that extracts a PBIX model, classifies fact/dimension tables, translates DAX measures to SQL, and emits metric-view YAML and DDL |
 
 ---
@@ -50,7 +53,13 @@ flowchart TB
         filtex["SelectRows\nfilter predicate"]
     end
 
-    pq --> ucref & sqlext & filtex
+    subgraph pmg ["powermglot"]
+        direction TB
+        mparse["parse_m_source\n(→ MSourceInfo)"]
+    end
+
+    pq --> mparse
+    mparse --> ucref & sqlext & filtex
 
     %% ── Analysis ─────────────────────────────────────────────────────────
     subgraph ana ["ModelAnalyzer"]
@@ -102,7 +111,27 @@ flowchart TB
 - **Tables** and their column schemas (names + pandas dtypes)
 - **DAX measures** (expression text, display folder, description)
 - **Relationships** (from/to table+column, active flag, cardinality)
-- **Power Query M expressions** — parsed for Unity Catalog references (catalog/schema/table)
+- **Power Query M expressions** — parsed by `powermglot.parse_m_source` to resolve Unity Catalog references (`catalog.schema.table`), pass-through `NativeQuery` SQL, and `Table.SelectRows` filter predicates
+
+`parse_m_source` handles all common Databricks connector patterns (`Databricks.Catalogs`, `Databricks.Query`, `Value.NativeQuery`, `Sql.Database`) and returns an `MSourceInfo` object:
+
+```python
+from powermglot import parse_m_source
+
+info = parse_m_source("""
+    let
+        Source = Databricks.Catalogs("host", "443", [Catalog="prod"]),
+        db = Source{[Name="pbi"]}[Data],
+        orders = db{[Name="orders"]}[Data],
+        filtered = Table.SelectRows(orders, each [status] = "Active")
+    in filtered
+""")
+# info.source_ref  == "prod.pbi.orders"
+# info.filter_sql  == "status = 'Active'"
+# info.native_sql  is None
+```
+
+When `source_ref` cannot be resolved (e.g. an unsupported connector), `PbixExtractor` falls back to regex-based pattern matching and then to the `--source-catalog` / `--source-schema` defaults.
 
 ```python
 from pbi2dbr.extractor import PbixExtractor
@@ -399,10 +428,17 @@ daxglot/                  # core DAX→SQL library
   transpiler.py           # AST → sqlglot expression tree
   measure_translator.py   # high-level DAX measure → SQL + window spec
 
+powermglot/               # Power Query M parser and SQL transpiler
+  powermglot/
+    lexer.py              # M tokeniser
+    parser.py             # recursive-descent M parser → AST
+    ast_nodes.py          # M AST node types
+    transpiler.py         # AST → SQL (m_to_sql, parse_m_source, MSourceInfo)
+
 pbi2dbr/                  # PBIX conversion library + CLI
   pbi2dbr/
     models.py             # SemanticModel, FactTable, MetricViewSpec, …
-    extractor.py          # PBIX → SemanticModel (via pbixray)
+    extractor.py          # PBIX → SemanticModel (via pbixray + powermglot)
     analyzer.py           # fact/dim classification, join-tree building
     translator.py         # DAX measures → Measure objects (wraps daxglot)
     generator.py          # MetricViewSpec → YAML + SQL DDL

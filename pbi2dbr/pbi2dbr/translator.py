@@ -7,6 +7,7 @@ from typing import Optional
 
 from daxglot.measure_translator import MeasureTranslation, WindowSpec, translate_measure
 
+from . import console
 from .models import Dimension, FactTable, Join, Measure, PbiMeasure
 
 
@@ -92,7 +93,7 @@ class DaxBridge:
                 }
             )
 
-        return Measure(
+        measure = Measure(
             name=pbi_measure.name,
             expr=sql_expr,
             comment=pbi_measure.description or None,
@@ -102,6 +103,15 @@ class DaxBridge:
             original_dax=dax,
             warnings=result.warnings,
         )
+        console.show_dax(
+            pbi_measure.table,
+            pbi_measure.name,
+            dax,
+            sql_expr,
+            window,
+            result.warnings,
+        )
+        return measure
 
     # ------------------------------------------------------------------
     # Column reference normalisation
