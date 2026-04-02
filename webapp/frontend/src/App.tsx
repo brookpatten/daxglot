@@ -3,7 +3,6 @@ import { CollectPanel } from "./components/CollectPanel";
 import { CompareView } from "./components/CompareView";
 import { ConvertPanel } from "./components/ConvertPanel";
 import { MeasureList } from "./components/MeasureList";
-import { SearchFilters } from "./components/SearchFilters";
 import { useCompare } from "./hooks/useCompare";
 import { useMeasures } from "./hooks/useMeasures";
 import type { MeasureFilters } from "./types/measure";
@@ -51,7 +50,6 @@ export default function App() {
                 </div>
             </header>
             <main className={styles.main}>
-                <SearchFilters filters={filters} onChange={setFilters} />
                 <MeasureList
                     measures={measures}
                     loading={loading}
@@ -60,6 +58,8 @@ export default function App() {
                     onToggleSelect={handleToggleSelect}
                     onCompare={handleCompare}
                     onClearSelection={() => setSelectedIds(new Set())}
+                    filters={filters}
+                    onFiltersChange={setFilters}
                 />
             </main>
 

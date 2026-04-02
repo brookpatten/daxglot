@@ -1,0 +1,5 @@
+metric_view: playground.bravo.country_sales
+name: count
+expr: COUNT(*)
+comment: Represents the total number of rows in the dataset. Use this measure to count all
+display_name: Count

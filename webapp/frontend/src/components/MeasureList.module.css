@@ -72,3 +72,180 @@
     color: #7b1fa2;
     font-style: italic;
 }
+
+/* ── Table ─────────────────────────────────────────── */
+
+.tableWrap {
+    overflow-x: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.table thead tr {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.table tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* ── Header cells ──────────────────────────────────── */
+
+.thCheck,
+.thExpand {
+    width: 36px;
+    padding: 0.6rem 0.5rem;
+}
+
+.thName {
+    padding: 0.5rem 0.75rem;
+    min-width: 160px;
+}
+
+.thDisplay {
+    padding: 0.5rem 0.75rem;
+    min-width: 120px;
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.thMv {
+    padding: 0.5rem 0.75rem;
+    min-width: 150px;
+}
+
+.thExpr {
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+}
+
+/* ── Sort button ───────────────────────────────────── */
+
+.sortBtn {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #495057;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.01em;
+}
+
+.sortBtn:hover {
+    color: #212529;
+}
+
+.sortActive {
+    color: #6f42c1;
+}
+
+.sortIcon {
+    font-size: 0.7rem;
+    color: #adb5bd;
+}
+
+.sortActive .sortIcon {
+    color: #6f42c1;
+}
+
+/* ── Filter inputs ─────────────────────────────────── */
+
+.filterInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #212529;
+    background: #fff;
+}
+
+.filterInput:focus {
+    outline: none;
+    border-color: #6f42c1;
+    box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.15);
+}
+
+.exprHeaderLabel {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #495057;
+    margin-bottom: 0.35rem;
+}
+
+.exprFilters {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.exprFilters .filterInput {
+    width: auto;
+    flex: 1 1 80px;
+    min-width: 70px;
+}
+
+/* ── Empty state ───────────────────────────────────── */
+
+.emptyCell {
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+}
+
+/* ── Pagination ────────────────────────────────────── */
+
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.85rem;
+}
+
+.pageBtn {
+    padding: 0.3rem 0.65rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #495057;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.pageBtn:hover:not(:disabled) {
+    background: #f1f3f5;
+    border-color: #adb5bd;
+}
+
+.pageBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.pageInfo {
+    font-size: 0.82rem;
+    color: #6c757d;
+    padding: 0 0.4rem;
+}
