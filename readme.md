@@ -4,7 +4,7 @@ A library/cli for converting **PowerBI semantic models** (`.pbix` files) into **
 
 "Couldn't I just do that with an LLM?".  Yes, you could.
 
-The project is split into four packages:
+The project is split into multiple packages:
 
 | Package | Purpose |
 |---------|---------|
@@ -12,6 +12,7 @@ The project is split into four packages:
 | `powermglot` | Power Query M parser and SQL transpiler; exposes `parse_m_source` to extract Unity Catalog table references and filter predicates from M `let…in` expressions |
 | `pbi2dbr` | CLI + library that extracts a PBIX model, classifies fact/dimension tables, translates DAX measures to SQL, and emits metric-view YAML and DDL || `measurediff` | Collects metric view measure definitions from Databricks Unity Catalog (with recursive column lineage) and compares them to identify what is the same, different, or equivalent |
 | `measurediff` | Extract, Compare & Contrast unity catalog metric view measures including upstream lineage |
+| `webapp` | FastAPI Backend and React Frontend for web UI that provides all of the above |
 ---
 
 ## Quick start

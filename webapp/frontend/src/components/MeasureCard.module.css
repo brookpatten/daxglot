@@ -4,6 +4,12 @@
     margin-bottom: 0.75rem;
     background: #fff;
     overflow: hidden;
+    transition: border-color 0.1s, box-shadow 0.1s;
+}
+
+.cardSelected {
+    border-color: #6f42c1;
+    box-shadow: 0 0 0 2px #e9d8fd;
 }
 
 .header {
@@ -11,12 +17,28 @@
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    cursor: pointer;
     user-select: none;
 }
 
 .header:hover {
     background: #f8f9fa;
+}
+
+.checkbox {
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #6f42c1;
+}
+
+.headerContent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex: 1;
+    cursor: pointer;
 }
 
 .titleRow {

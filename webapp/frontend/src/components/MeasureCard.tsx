@@ -4,6 +4,8 @@ import styles from "./MeasureCard.module.css";
 
 interface Props {
     measure: Measure;
+    selected?: boolean;
+    onToggleSelect?: (id: string) => void;
 }
 
 function LineageTree({ nodes, depth = 0 }: { nodes: LineageColumn[]; depth?: number }) {
@@ -24,21 +26,33 @@ function LineageTree({ nodes, depth = 0 }: { nodes: LineageColumn[]; depth?: num
     );
 }
 
-export function MeasureCard({ measure }: Props) {
+export function MeasureCard({ measure, selected = false, onToggleSelect }: Props) {
     const [expanded, setExpanded] = useState(false);
 
     return (
-        <article className={styles.card}>
-            <div className={styles.header} onClick={() => setExpanded((e) => !e)}>
-                <div className={styles.titleRow}>
-                    <span className={styles.name}>{measure.name}</span>
-                    {measure.display_name && (
-                        <span className={styles.displayName}>{measure.display_name}</span>
-                    )}
-                    <span className={styles.mv}>{measure.metric_view}</span>
+        <article className={`${styles.card} ${selected ? styles.cardSelected : ""}`}>
+            <div className={styles.header}>
+                {onToggleSelect && (
+                    <input
+                        type="checkbox"
+                        className={styles.checkbox}
+                        checked={selected}
+                        onChange={() => onToggleSelect(measure.id)}
+                        title="Select for comparison"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                )}
+                <div className={styles.headerContent} onClick={() => setExpanded((e) => !e)}>
+                    <div className={styles.titleRow}>
+                        <span className={styles.name}>{measure.name}</span>
+                        {measure.display_name && (
+                            <span className={styles.displayName}>{measure.display_name}</span>
+                        )}
+                        <span className={styles.mv}>{measure.metric_view}</span>
+                    </div>
+                    <code className={styles.expr}>{measure.expr}</code>
+                    <span className={styles.expandBtn}>{expanded ? "▲" : "▼"}</span>
                 </div>
-                <code className={styles.expr}>{measure.expr}</code>
-                <span className={styles.expandBtn}>{expanded ? "▲" : "▼"}</span>
             </div>
 
             {expanded && (

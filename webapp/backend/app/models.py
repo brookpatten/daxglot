@@ -89,3 +89,69 @@ class ConvertOut(BaseModel):
     m_resolutions: list[MSourceResolutionOut] = []
     total_metric_views: int
     total_measures_converted: int
+
+
+# ---------------------------------------------------------------------------
+# Measure comparison models
+# ---------------------------------------------------------------------------
+
+
+class LeafSourceOut(BaseModel):
+    table: str
+    column: str
+
+
+class ExprComparisonOut(BaseModel):
+    raw_a: str
+    raw_b: str
+    normalized_a: str
+    normalized_b: str
+    same: bool
+
+
+class WindowFieldDiffOut(BaseModel):
+    spec_index: int
+    field: str
+    value_a: Optional[str]
+    value_b: Optional[str]
+
+
+class WindowComparisonOut(BaseModel):
+    specs_a: list[WindowSpecOut]
+    specs_b: list[WindowSpecOut]
+    same: bool
+    field_diffs: list[WindowFieldDiffOut] = []
+
+
+class LineageComparisonOut(BaseModel):
+    leaf_sources_a: list[LeafSourceOut]
+    leaf_sources_b: list[LeafSourceOut]
+    shared_leaves: list[LeafSourceOut]
+    only_in_a: list[LeafSourceOut]
+    only_in_b: list[LeafSourceOut]
+    leaves_same: bool
+    has_extra_hops_a: bool
+    has_extra_hops_b: bool
+
+
+class PairComparisonOut(BaseModel):
+    id_a: str
+    id_b: str
+    view_a: str
+    view_b: str
+    name_a: str
+    name_b: str
+    score: float
+    label: str
+    expr: ExprComparisonOut
+    window: WindowComparisonOut
+    lineage: LineageComparisonOut
+
+
+class CompareRequest(BaseModel):
+    ids: list[str]
+
+
+class CompareOut(BaseModel):
+    measures: list[MeasureOut]
+    pairs: list[PairComparisonOut]

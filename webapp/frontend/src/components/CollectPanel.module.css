@@ -1,25 +1,53 @@
-.panel {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    margin-bottom: 1.5rem;
-    overflow: hidden;
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 1000;
+    padding: 2rem 1rem;
+    overflow-y: auto;
 }
 
-.toggle {
+.modal {
+    background: #fff;
+    border-radius: 8px;
     width: 100%;
-    padding: 0.75rem 1rem;
+    max-width: 700px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+    gap: 1rem;
+}
+
+.modalTitle {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #212529;
+    flex: 1;
+    margin: 0;
+}
+
+.closeBtn {
     background: none;
     border: none;
-    text-align: left;
-    font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 1.2rem;
     cursor: pointer;
-    color: #495057;
+    color: #6c757d;
+    line-height: 1;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
 }
 
-.toggle:hover {
-    background: #e9ecef;
+.closeBtn:hover {
+    background: #f8f9fa;
+    color: #212529;
 }
 
 .form {

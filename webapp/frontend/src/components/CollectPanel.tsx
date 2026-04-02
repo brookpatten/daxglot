@@ -4,10 +4,10 @@ import styles from "./CollectPanel.module.css";
 
 interface Props {
     onCollected: () => void;
+    onClose: () => void;
 }
 
-export function CollectPanel({ onCollected }: Props) {
-    const [open, setOpen] = useState(false);
+export function CollectPanel({ onCollected, onClose }: Props) {
     const [catalogInput, setCatalogInput] = useState("");
     const [schema, setSchema] = useState("");
     const [view, setView] = useState("");
@@ -28,12 +28,12 @@ export function CollectPanel({ onCollected }: Props) {
     }
 
     return (
-        <section className={styles.panel}>
-            <button className={styles.toggle} onClick={() => setOpen((o) => !o)}>
-                {open ? "▲ Collection" : "▼ Collect from Databricks"}
-            </button>
-
-            {open && (
+        <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div className={styles.modal}>
+                <div className={styles.modalHeader}>
+                    <h2 className={styles.modalTitle}>Import From Databricks</h2>
+                    <button className={styles.closeBtn} onClick={onClose} aria-label="Close">✕</button>
+                </div>
                 <form className={styles.form} onSubmit={handleSubmit}>
                     <div className={styles.row}>
                         <label>
@@ -98,7 +98,7 @@ export function CollectPanel({ onCollected }: Props) {
                         <p className={styles.error}>{error}</p>
                     )}
                 </form>
-            )}
-        </section>
+            </div>
+        </div>
     );
 }

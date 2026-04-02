@@ -164,8 +164,7 @@ function ResolutionTable({ resolutions }: { resolutions: MSourceResolution[] }) 
 // ConvertPanel
 // ---------------------------------------------------------------------------
 
-export function ConvertPanel() {
-    const [open, setOpen] = useState(false);
+export function ConvertPanel({ onClose }: { onClose: () => void }) {
     const [file, setFile] = useState<File | null>(null);
     const [catalog, setCatalog] = useState("");
     const [schema, setSchema] = useState("");
@@ -195,12 +194,12 @@ export function ConvertPanel() {
     }
 
     return (
-        <section className={styles.panel}>
-            <button className={styles.toggle} onClick={() => setOpen((o) => !o)}>
-                {open ? "▲ Convert PBIX" : "▼ Convert PowerBI PBIX to Metric Views"}
-            </button>
-
-            {open && (
+        <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div className={styles.modal}>
+                <div className={styles.modalHeader}>
+                    <h2 className={styles.modalTitle}>Import From PowerBI</h2>
+                    <button className={styles.closeBtn} onClick={onClose} aria-label="Close">✕</button>
+                </div>
                 <>
                     <form className={styles.form} onSubmit={handleSubmit}>
                         <div>
@@ -369,7 +368,7 @@ export function ConvertPanel() {
                         </div>
                     )}
                 </>
-            )}
-        </section>
+            </div>
+        </div>
     );
 }
