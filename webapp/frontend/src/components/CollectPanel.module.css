@@ -1,0 +1,100 @@
+.panel {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.toggle {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: #495057;
+}
+
+.toggle:hover {
+    background: #e9ecef;
+}
+
+.form {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-top: 1px solid #dee2e6;
+}
+
+.row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.row label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: #495057;
+    min-width: 140px;
+}
+
+.row input[type="text"],
+.row input[type="number"] {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.checkLabel {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0.5rem !important;
+    font-size: 0.85rem;
+    color: #495057;
+    cursor: pointer;
+}
+
+.hint {
+    font-weight: 400;
+    color: #868e96;
+}
+
+.actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.actions button {
+    padding: 0.45rem 1.2rem;
+    background: #0d6efd;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.actions button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.success {
+    color: #198754;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.error {
+    color: #dc3545;
+    font-size: 0.9rem;
+    margin: 0;
+}

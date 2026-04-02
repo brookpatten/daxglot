@@ -1,0 +1,15 @@
+.state {
+    padding: 2rem 0;
+    text-align: center;
+    color: #6c757d;
+}
+
+.error {
+    color: #dc3545;
+}
+
+.count {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin: 0 0 0.75rem;
+}

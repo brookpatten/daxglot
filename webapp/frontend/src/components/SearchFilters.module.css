@@ -1,0 +1,53 @@
+.container {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 0.75rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.82rem;
+    color: #495057;
+}
+
+.field span {
+    font-weight: 600;
+}
+
+.field input {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.88rem;
+}
+
+.field input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.clear {
+    margin-top: 0.75rem;
+    background: none;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.82rem;
+    color: #6c757d;
+    cursor: pointer;
+}
+
+.clear:hover {
+    background: #f8f9fa;
+}

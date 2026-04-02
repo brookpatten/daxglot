@@ -1,0 +1,135 @@
+.card {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    background: #fff;
+    overflow: hidden;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.header:hover {
+    background: #f8f9fa;
+}
+
+.titleRow {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    min-width: 180px;
+}
+
+.name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #212529;
+}
+
+.displayName {
+    font-size: 0.82rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.mv {
+    font-size: 0.78rem;
+    color: #0d6efd;
+    background: #e7f1ff;
+    padding: 0.1rem 0.45rem;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.expr {
+    flex: 1;
+    background: #f1f3f5;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.84rem;
+    color: #495057;
+    word-break: break-all;
+}
+
+.expandBtn {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    color: #adb5bd;
+}
+
+.body {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #dee2e6;
+    font-size: 0.88rem;
+}
+
+.comment {
+    color: #495057;
+    margin: 0 0 0.75rem;
+    font-style: italic;
+}
+
+.section {
+    margin-bottom: 0.75rem;
+}
+
+.section h4 {
+    margin: 0 0 0.3rem;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #868e96;
+}
+
+.section ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.section li {
+    margin-bottom: 0.2rem;
+    color: #212529;
+}
+
+.lineageList {
+    list-style: disc;
+    margin: 0;
+}
+
+.lineageNode {
+    margin-bottom: 0.2rem;
+    line-height: 1.5;
+}
+
+.lineageTable {
+    font-family: monospace;
+    font-size: 0.83rem;
+    color: #212529;
+}
+
+.lineageCol {
+    font-family: monospace;
+    font-size: 0.83rem;
+    color: #0d6efd;
+}
+
+.lineageType {
+    font-size: 0.75rem;
+    color: #adb5bd;
+    margin-left: 0.3rem;
+}
+
+.noExtra {
+    color: #adb5bd;
+    font-size: 0.85rem;
+    margin: 0;
+}
