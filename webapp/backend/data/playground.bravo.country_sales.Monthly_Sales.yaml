@@ -1,0 +1,16 @@
+metric_view: playground.bravo.country_sales
+name: Monthly_Sales
+expr: SUM(source.total)
+display_name: Monthly Sales
+window:
+- order: date
+  range: trailing 1 months
+  semiadditive: last
+lineage:
+- table: playground.bravo.sales
+  column: total
+  type: UNKNOWN
+  upstream:
+  - table: playground.alpha.sales
+    column: total
+    type: TABLE

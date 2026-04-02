@@ -1,0 +1,147 @@
+.row {
+    background: #fff;
+    transition: background 0.1s;
+}
+
+.row:hover {
+    background: #f8f9fa;
+}
+
+.rowSelected {
+    background: #f3e8ff;
+}
+
+.rowSelected:hover {
+    background: #ede0ff;
+}
+
+.checkCell {
+    width: 36px;
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+    vertical-align: middle;
+}
+
+.checkbox {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: #6f42c1;
+}
+
+.nameCell {
+    padding: 0.6rem 0.75rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #212529;
+}
+
+.displayNameCell {
+    padding: 0.6rem 0.75rem;
+    vertical-align: middle;
+}
+
+.displayName {
+    font-size: 0.82rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.mvCell {
+    padding: 0.6rem 0.75rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.mv {
+    font-size: 0.78rem;
+    color: #0d6efd;
+    background: #e7f1ff;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.exprCell {
+    padding: 0.6rem 0.75rem;
+    vertical-align: middle;
+    max-width: 380px;
+}
+
+.expr {
+    display: block;
+    background: #f1f3f5;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: #495057;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.expandCell {
+    width: 36px;
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+    vertical-align: middle;
+    cursor: pointer;
+    color: #adb5bd;
+    user-select: none;
+}
+
+.expandCell:hover {
+    color: #6c757d;
+}
+
+.expandBtn {
+    font-size: 0.75rem;
+}
+
+.detailRow {
+    background: #fafafa;
+}
+
+.detailCell {
+    padding: 0.75rem 1.25rem 0.85rem 2.5rem;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 0.88rem;
+}
+
+.comment {
+    color: #495057;
+    margin: 0 0 0.75rem;
+    font-style: italic;
+}
+
+.section {
+    margin-bottom: 0.75rem;
+}
+
+.section h4 {
+    margin: 0 0 0.3rem;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #868e96;
+}
+
+.section ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.section li {
+    margin-bottom: 0.2rem;
+    color: #212529;
+}
+
+.noExtra {
+    color: #adb5bd;
+    font-size: 0.85rem;
+    margin: 0;
+}

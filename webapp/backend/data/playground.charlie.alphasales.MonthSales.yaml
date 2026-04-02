@@ -1,0 +1,12 @@
+metric_view: playground.charlie.alphasales
+name: MonthSales
+expr: SUM(source.total)
+display_name: Month Sales
+window:
+- order: date
+  range: trailing 30 days
+  semiadditive: last
+lineage:
+- table: playground.alpha.sales
+  column: total
+  type: UNKNOWN

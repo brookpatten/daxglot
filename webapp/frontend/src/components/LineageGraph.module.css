@@ -1,0 +1,223 @@
+.wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.canvas {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fafafa;
+    /* Cytoscape mounts into this div */
+}
+
+.empty {
+    padding: 1.5rem;
+    text-align: center;
+    color: #adb5bd;
+    font-size: 0.85rem;
+    border: 1px dashed #dee2e6;
+    border-radius: 6px;
+}
+
+/* ---- Legend ---- */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    font-size: 0.77rem;
+    color: #495057;
+    padding: 0 0.25rem;
+    align-items: center;
+}
+
+.legendItem {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+/* Vertical separator between entity-type and measure-color groups */
+.legendSep {
+    display: inline-block;
+    width: 1px;
+    height: 14px;
+    background: #dee2e6;
+    margin: 0 0.25rem;
+}
+
+/* Shape swatches for entity types */
+.legendSwatchSquare {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 2px;
+    border: 2px solid #adb5bd;
+    background: transparent;
+    flex-shrink: 0;
+}
+
+.legendSwatchDashed {
+    border-style: dashed;
+}
+
+.legendSwatchEllipse {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid #adb5bd;
+    background: transparent;
+    flex-shrink: 0;
+}
+
+.legendSwatchHex {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    background: transparent;
+    border: 0;
+    flex-shrink: 0;
+    /* Hexagon via clip-path; border drawn as colored bg + clip */
+    position: relative;
+}
+
+.legendSwatchHex::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #adb5bd;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+.legendEdge {
+    display: inline-block;
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* ---- Tooltip (portalled to body) ---- */
+.tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: rgba(33, 37, 41, 0.92);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 4px;
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- Measure details strip ---- */
+.measureDetails {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.measureDetail {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+}
+
+.measureDetail+.measureDetail {
+    border-top: 1px solid #dee2e6;
+}
+
+.measureDetailPill {
+    width: 4px;
+    flex-shrink: 0;
+    border-radius: 0;
+}
+
+.measureDetailBody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.55rem 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.measureDetailHeader {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.measureDetailName {
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.measureDetailView {
+    font-size: 0.73rem;
+    color: #6c757d;
+    background: #f1f3f5;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.measureDetailExpr {
+    font-family: "Consolas", "Fira Code", monospace;
+    font-size: 0.8rem;
+    color: #495057;
+    background: #f8f9fa;
+    padding: 0.2rem 0.45rem;
+    border-radius: 3px;
+    word-break: break-all;
+    border: 1px solid #e9ecef;
+}
+
+.measureDetailWindow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.6rem;
+    margin-top: 0.1rem;
+}
+
+.measureDetailWindowLabel {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #868e96;
+    flex-shrink: 0;
+}
+
+.measureDetailWindowSpec {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    font-size: 0.78rem;
+    background: #fff3cd;
+    border: 1px solid #ffe08a;
+    border-radius: 4px;
+    padding: 0.1rem 0.45rem;
+    color: #664d03;
+}
+
+.measureDetailWindowSpec strong {
+    font-weight: 600;
+}
+
+.measureDetailWindowSpec em {
+    font-style: italic;
+    color: #856404;
+    font-size: 0.72rem;
+}
