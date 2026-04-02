@@ -1,29 +1,12 @@
 import { useState } from "react";
-import type { LineageColumn, Measure } from "../types/measure";
+import type { Measure } from "../types/measure";
 import styles from "./MeasureCard.module.css";
+import { LineageGraph, PILL_COLORS } from "./LineageGraph";
 
 interface Props {
     measure: Measure;
     selected?: boolean;
     onToggleSelect?: (id: string) => void;
-}
-
-function LineageTree({ nodes, depth = 0 }: { nodes: LineageColumn[]; depth?: number }) {
-    if (nodes.length === 0) return null;
-    return (
-        <ul className={styles.lineageList} style={{ paddingLeft: depth === 0 ? 0 : "1.2rem" }}>
-            {nodes.map((node, i) => (
-                <li key={i} className={styles.lineageNode}>
-                    <span className={styles.lineageTable}>{node.table}</span>
-                    <span className={styles.lineageCol}>.{node.column}</span>
-                    <span className={styles.lineageType}>[{node.type}]</span>
-                    {node.upstream.length > 0 && (
-                        <LineageTree nodes={node.upstream} depth={depth + 1} />
-                    )}
-                </li>
-            ))}
-        </ul>
-    );
 }
 
 export function MeasureCard({ measure, selected = false, onToggleSelect }: Props) {
@@ -87,7 +70,18 @@ export function MeasureCard({ measure, selected = false, onToggleSelect }: Props
                     {measure.lineage.length > 0 && (
                         <div className={styles.section}>
                             <h4>Lineage</h4>
-                            <LineageTree nodes={measure.lineage} />
+                            <LineageGraph
+                                measures={[{
+                                    id: measure.id,
+                                    name: measure.name,
+                                    expr: measure.expr,
+                                    metric_view: measure.metric_view,
+                                    lineage: measure.lineage,
+                                    window: measure.window,
+                                }]}
+                                measureColors={[PILL_COLORS[0]]}
+                                height={280}
+                            />
                         </div>
                     )}
 

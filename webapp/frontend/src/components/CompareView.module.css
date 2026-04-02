@@ -311,80 +311,12 @@
     color: #7c2d12;
 }
 
-/* ---- Lineage venn ---- */
-.lineageGrid {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 0.5rem;
-    align-items: start;
-}
-
-.lineageCol {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.lineageColTitle {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #6c757d;
-    margin-bottom: 0.1rem;
-}
-
-.lineageShared {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    align-self: center;
-}
-
-.sharedTitle {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #059669;
-    text-align: center;
-}
-
-.leafChip {
-    font-size: 0.74rem;
-    font-family: "Consolas", "Fira Code", monospace;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-}
-
-.leafShared {
-    background: #d1fae5;
-    border-color: #6ee7b7;
-    color: #065f46;
-}
-
-.leafOnly {
-    background: #fff7ed;
-    border-color: #fed7aa;
-    color: #7c2d12;
-}
-
-.leafEmpty {
-    font-size: 0.75rem;
-    color: #adb5bd;
-    font-style: italic;
-    padding: 0.2rem 0;
-}
-
-.hopsNote {
-    font-size: 0.75rem;
-    color: #6c757d;
-    font-style: italic;
-    padding: 0.15rem 0;
+/* ---- Pair color bar (split gradient) ---- */
+.pairColorBar {
+    width: 28px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
 }
 
 /* ---- Window diff table ---- */

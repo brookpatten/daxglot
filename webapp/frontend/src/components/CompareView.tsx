@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Measure } from "../types/measure";
-import type { CompareResult, LeafSource, PairComparison } from "../types/compare";
+import type { CompareResult, PairComparison } from "../types/compare";
 import styles from "./CompareView.module.css";
+import { LineageGraph } from "./LineageGraph";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -175,38 +176,68 @@ function WindowBlock({ pair }: { pair: PairComparison }) {
 }
 
 // ---------------------------------------------------------------------------
-// Lineage diff — venn-style three columns
+// Lineage diff — Cytoscape graph with per-measure coloured edges
 // ---------------------------------------------------------------------------
 
-function LeafChip({ leaf, variant }: { leaf: LeafSource; variant: "shared" | "only" }) {
-    return (
-        <div
-            className={`${styles.leafChip} ${variant === "shared" ? styles.leafShared : styles.leafOnly}`}
-            title={`${leaf.table}.${leaf.column}`}
-        >
-            <span style={{ opacity: 0.65 }}>{leaf.table.split(".").slice(-1)[0]}</span>
-            <span style={{ fontWeight: 600 }}>.{leaf.column}</span>
-        </div>
-    );
-}
-
-function LineageBlock({ pair }: { pair: PairComparison }) {
+function LineageBlock({
+    pair,
+    measures,
+    colors,
+}: {
+    pair: PairComparison;
+    measures: Measure[];
+    colors: string[];
+}) {
     const [open, setOpen] = useState(true);
     const { lineage } = pair;
     const noLineage =
         lineage.leaf_sources_a.length === 0 && lineage.leaf_sources_b.length === 0;
 
+    // Build GraphMeasure objects for the two measures in this pair
+    const mA = measures.find((m) => m.id === pair.id_a);
+    const mB = measures.find((m) => m.id === pair.id_b);
+    const idxA = measures.findIndex((m) => m.id === pair.id_a);
+    const idxB = measures.findIndex((m) => m.id === pair.id_b);
+
+    const graphMeasures = [
+        mA && {
+            id: pair.id_a,
+            name: pair.name_a,
+            expr: mA.expr,
+            metric_view: pair.view_a,
+            lineage: mA.lineage,
+            window: mA.window,
+        },
+        mB && {
+            id: pair.id_b,
+            name: pair.name_b,
+            expr: mB.expr,
+            metric_view: pair.view_b,
+            lineage: mB.lineage,
+            window: mB.window,
+        },
+    ].filter(Boolean) as { id: string; name: string; expr: string; metric_view: string; lineage: Measure["lineage"]; window: Measure["window"] }[];
+
+    const graphColors = [
+        colors[idxA % colors.length],
+        colors[idxB % colors.length],
+    ];
+
+    const statusLabel = noLineage
+        ? "No lineage data"
+        : lineage.leaves_same
+            ? `${lineage.shared_leaves.length} shared sources`
+            : `${lineage.only_in_a.length} only-A · ${lineage.shared_leaves.length} shared · ${lineage.only_in_b.length} only-B`;
+
     return (
         <div className={styles.dimBlock}>
             <div className={styles.dimHeader} onClick={() => setOpen((o) => !o)}>
-                <span className={styles.dimTitle}>Lineage (leaf sources)</span>
+                <span className={styles.dimTitle}>Lineage</span>
                 {noLineage ? (
                     <span className={`${styles.dimSame} ${styles.na}`}>No lineage data</span>
                 ) : (
                     <span className={`${styles.dimSame} ${lineage.leaves_same ? styles.same : styles.diff}`}>
-                        {lineage.leaves_same
-                            ? `${lineage.shared_leaves.length} shared`
-                            : `${lineage.only_in_a.length} only-A · ${lineage.shared_leaves.length} shared · ${lineage.only_in_b.length} only-B`}
+                        {statusLabel}
                     </span>
                 )}
                 <span className={styles.dimToggle}>{open ? "▲" : "▼"}</span>
@@ -218,59 +249,11 @@ function LineageBlock({ pair }: { pair: PairComparison }) {
                             No lineage was collected for these measures. Run collection with lineage enabled.
                         </span>
                     ) : (
-                        <>
-                            <div className={styles.lineageGrid}>
-                                {/* Only in A */}
-                                <div className={styles.lineageCol}>
-                                    <span className={styles.lineageColTitle}>
-                                        Only in {pair.name_a}
-                                    </span>
-                                    {lineage.only_in_a.length === 0 ? (
-                                        <span className={styles.leafEmpty}>—</span>
-                                    ) : (
-                                        lineage.only_in_a.map((l, i) => (
-                                            <LeafChip key={i} leaf={l} variant="only" />
-                                        ))
-                                    )}
-                                    {lineage.has_extra_hops_a && (
-                                        <span className={styles.hopsNote}>
-                                            ↳ extra intermediate hop(s)
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Shared */}
-                                <div className={styles.lineageShared}>
-                                    <span className={styles.sharedTitle}>Shared</span>
-                                    {lineage.shared_leaves.length === 0 ? (
-                                        <span className={styles.leafEmpty}>—</span>
-                                    ) : (
-                                        lineage.shared_leaves.map((l, i) => (
-                                            <LeafChip key={i} leaf={l} variant="shared" />
-                                        ))
-                                    )}
-                                </div>
-
-                                {/* Only in B */}
-                                <div className={styles.lineageCol}>
-                                    <span className={styles.lineageColTitle}>
-                                        Only in {pair.name_b}
-                                    </span>
-                                    {lineage.only_in_b.length === 0 ? (
-                                        <span className={styles.leafEmpty}>—</span>
-                                    ) : (
-                                        lineage.only_in_b.map((l, i) => (
-                                            <LeafChip key={i} leaf={l} variant="only" />
-                                        ))
-                                    )}
-                                    {lineage.has_extra_hops_b && (
-                                        <span className={styles.hopsNote}>
-                                            ↳ extra intermediate hop(s)
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </>
+                        <LineageGraph
+                            measures={graphMeasures}
+                            measureColors={graphColors}
+                            height={360}
+                        />
                     )}
                 </div>
             )}
@@ -285,18 +268,26 @@ function LineageBlock({ pair }: { pair: PairComparison }) {
 function PairCard({
     pair,
     measures,
+    colors,
 }: {
     pair: PairComparison;
     measures: Measure[];
+    colors: string[];
 }) {
-    const mA = measures.find((m) => m.id === pair.id_a);
-    const mB = measures.find((m) => m.id === pair.id_b);
+    const idxA = measures.findIndex((m) => m.id === pair.id_a);
+    const idxB = measures.findIndex((m) => m.id === pair.id_b);
 
     return (
         <div className={styles.pairSection}>
             <div className={styles.pairHeader}>
+                <span
+                    className={styles.pairColorBar}
+                    style={{ background: `linear-gradient(90deg, ${colors[idxA % colors.length]} 50%, ${colors[idxB % colors.length]} 50%)` }}
+                />
                 <h3 className={styles.pairTitle}>
-                    {pair.name_a} vs {pair.name_b}
+                    <span style={{ color: colors[idxA % colors.length] }}>{pair.name_a}</span>
+                    <span style={{ color: "#6c757d", fontWeight: 400 }}> vs </span>
+                    <span style={{ color: colors[idxB % colors.length] }}>{pair.name_b}</span>
                 </h3>
                 <span
                     className={`${styles.scoreBadge} ${labelClass(pair.label)}`}
@@ -314,7 +305,7 @@ function PairCard({
             <div className={styles.pairBody}>
                 <ExprBlock pair={pair} />
                 <WindowBlock pair={pair} />
-                <LineageBlock pair={pair} />
+                <LineageBlock pair={pair} measures={measures} colors={colors} />
             </div>
         </div>
     );
@@ -360,6 +351,7 @@ export function CompareView({ selectedIds, result, status, error, onClose }: Pro
                                 key={`${pair.id_a}:${pair.id_b}`}
                                 pair={pair}
                                 measures={result.measures}
+                                colors={PILL_COLORS}
                             />
                         ))}
                     </div>

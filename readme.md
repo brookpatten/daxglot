@@ -1,8 +1,10 @@
 # daxglot / pbi2dbr
 
-A library/cli for converting **PowerBI semantic models** (`.pbix` files) into **Databricks Unity Catalog metric views**.
+A webapp, library, & cli for converting **PowerBI semantic models** (`.pbix` files) into **Databricks Unity Catalog metric views** and comparing and governing measures.
 
-"Couldn't I just do that with an LLM?".  Yes, you could.
+![screenshot](./doc/webapp.png)
+
+![screenshot](./doc/webapp-diff.png)
 
 The project is split into multiple packages:
 
@@ -15,25 +17,7 @@ The project is split into multiple packages:
 | `webapp` | FastAPI Backend and React Frontend for web UI that provides all of the above |
 ---
 
-## Quick start
-
-```bash
-# Install
-pip install pbi2dbr          # installs daxglot and pbixray automatically
-
-# Convert a PBIX file
-pbi2dbr convert \
-  --pbix "Adventure Works DW 2020.pbix" \
-  --catalog dev \
-  --schema pbi \
-  --output-dir ./output
-```
-
-This writes one `.yaml` + one `_mv.sql` file per detected fact table into `./output/`.
-
----
-
-## How it works
+## How PowerBI Conversion Works
 
 ```mermaid
 flowchart TB
@@ -318,6 +302,25 @@ source: dev.pbi.sales
 ...
 $$
 ```
+
+---
+
+
+## Quick start
+
+```bash
+# Install
+pip install pbi2dbr          # installs daxglot and pbixray automatically
+
+# Convert a PBIX file
+pbi2dbr convert \
+  --pbix "Adventure Works DW 2020.pbix" \
+  --catalog dev \
+  --schema pbi \
+  --output-dir ./output
+```
+
+This writes one `.yaml` + one `_mv.sql` file per detected fact table into `./output/`.
 
 ---
 

@@ -40,7 +40,7 @@ export default function App() {
     return (
         <div className={styles.layout}>
             <header className={styles.header}>
-                <h1 className={styles.title}>Measures Explorer</h1>
+                <h1 className={styles.title}>Measure Governance</h1>
                 <div className={styles.headerActions}>
                     <button className={styles.headerBtn} onClick={() => setConvertOpen(true)}>
                         Import From PowerBI
