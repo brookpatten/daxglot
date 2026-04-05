@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from daxglot.measure_translator import MeasureTranslation, WindowSpec, translate_measure
+from daxglot.measure_translator import (
+    ByteFormatSpec,
+    CurrencyFormatSpec,
+    DecimalPlacesSpec,
+    MeasureTranslation,
+    NumberFormatSpec,
+    PercentageFormatSpec,
+    WindowSpec,
+    format_spec_from_pbi_string,
+    format_spec_to_dict,
+    translate_measure,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -392,3 +403,243 @@ class TestParseErrors:
     def test_empty_expression(self):
         r = translated("= ")
         assert r.sql_expr is not None
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: synonyms
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSynonyms:
+    def test_synonyms_propagated(self):
+        r = translated("= SUM(Sales[Amount])", synonyms=[
+                       "revenue", "total sales"])
+        assert r.synonyms == ["revenue", "total sales"]
+
+    def test_no_synonyms_by_default(self):
+        r = translated("= SUM(Sales[Amount])")
+        assert r.synonyms == []
+
+    def test_synonyms_with_time_intelligence(self):
+        r = translated(
+            "= CALCULATE(SUM(Sales[Amount]), SAMEPERIODLASTYEAR('Date'[Date]))",
+            synonyms=["last year sales"],
+        )
+        assert "last year sales" in r.synonyms
+        assert r.window_spec  # window should still be set
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format_spec from explicit spec
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExplicitFormatSpec:
+    def test_explicit_number_format(self):
+        spec = NumberFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="exact", places=2),
+        )
+        r = translated("= SUM(Sales[Amount])", format_spec=spec)
+        assert isinstance(r.format_spec, NumberFormatSpec)
+        assert r.format_spec.decimal_places.places == 2
+
+    def test_explicit_currency_format(self):
+        spec = CurrencyFormatSpec(currency_code="EUR")
+        r = translated("= SUM(Sales[Revenue])", format_spec=spec)
+        assert isinstance(r.format_spec, CurrencyFormatSpec)
+        assert r.format_spec.currency_code == "EUR"
+
+    def test_explicit_percentage_format(self):
+        spec = PercentageFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="exact", places=1),
+        )
+        r = translated("= DIVIDE(SUM(A[x]), SUM(B[y]))", format_spec=spec)
+        assert isinstance(r.format_spec, PercentageFormatSpec)
+
+    def test_explicit_byte_format(self):
+        spec = ByteFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="max", places=2),
+        )
+        r = translated("= SUM(Storage[Bytes])", format_spec=spec)
+        assert isinstance(r.format_spec, ByteFormatSpec)
+
+    def test_explicit_spec_takes_precedence_over_format_string(self):
+        spec = CurrencyFormatSpec(currency_code="GBP")
+        r = translated(
+            "= SUM(Sales[Amount])",
+            format_spec=spec,
+            format_string="0.00%",  # should be ignored
+        )
+        assert isinstance(r.format_spec, CurrencyFormatSpec)
+        assert r.format_spec.currency_code == "GBP"
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format_spec from PBI format string
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestFormatSpecFromPbiString:
+    def test_currency_named(self):
+        spec = format_spec_from_pbi_string("Currency")
+        assert isinstance(spec, CurrencyFormatSpec)
+        assert spec.currency_code == "USD"
+        assert spec.decimal_places.places == 2
+
+    def test_currency_dollar_symbol(self):
+        spec = format_spec_from_pbi_string("$#,##0.00")
+        assert isinstance(spec, CurrencyFormatSpec)
+        assert spec.currency_code == "USD"
+        assert spec.decimal_places.places == 2
+
+    def test_currency_euro_symbol(self):
+        spec = format_spec_from_pbi_string("€#,##0.00")
+        assert isinstance(spec, CurrencyFormatSpec)
+        assert spec.currency_code == "EUR"
+
+    def test_currency_gbp_symbol(self):
+        spec = format_spec_from_pbi_string("£#,##0")
+        assert isinstance(spec, CurrencyFormatSpec)
+        assert spec.currency_code == "GBP"
+        assert spec.decimal_places.places == 0
+
+    def test_percentage_named(self):
+        spec = format_spec_from_pbi_string("Percent")
+        assert isinstance(spec, PercentageFormatSpec)
+
+    def test_percentage_format_two_decimals(self):
+        spec = format_spec_from_pbi_string("0.00%")
+        assert isinstance(spec, PercentageFormatSpec)
+        assert spec.decimal_places.places == 2
+
+    def test_percentage_format_zero_decimals(self):
+        spec = format_spec_from_pbi_string("0%")
+        assert isinstance(spec, PercentageFormatSpec)
+        assert spec.decimal_places.places == 0
+
+    def test_number_hash_format(self):
+        spec = format_spec_from_pbi_string("#,##0.00")
+        assert isinstance(spec, NumberFormatSpec)
+        assert spec.decimal_places.places == 2
+
+    def test_number_named_fixed(self):
+        spec = format_spec_from_pbi_string("Fixed")
+        assert isinstance(spec, NumberFormatSpec)
+
+    def test_number_no_group_separator(self):
+        spec = format_spec_from_pbi_string("0.00")
+        assert isinstance(spec, NumberFormatSpec)
+        assert spec.hide_group_separator is True
+
+    def test_unrecognised_returns_none(self):
+        spec = format_spec_from_pbi_string("General")
+        assert spec is None
+
+    def test_empty_returns_none(self):
+        assert format_spec_from_pbi_string("") is None
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format_spec from format_string parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestFormatStringParameter:
+    def test_currency_format_string(self):
+        r = translated("= SUM(Sales[Amount])", format_string="Currency")
+        assert isinstance(r.format_spec, CurrencyFormatSpec)
+        assert r.format_spec.currency_code == "USD"
+
+    def test_percentage_format_string(self):
+        r = translated(
+            "= DIVIDE(SUM(A[x]), SUM(B[total]))", format_string="0.00%")
+        assert isinstance(r.format_spec, PercentageFormatSpec)
+        assert r.format_spec.decimal_places.places == 2
+
+    def test_number_format_string(self):
+        r = translated("= SUM(Sales[Qty])", format_string="#,##0")
+        assert isinstance(r.format_spec, NumberFormatSpec)
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format_spec inferred from DAX FORMAT() call
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestDaxFormatInference:
+    def test_format_percent(self):
+        r = translated('= FORMAT(DIVIDE(SUM(A[x]), SUM(B[y])), "0.00%")')
+        assert isinstance(r.format_spec, PercentageFormatSpec)
+        assert r.format_spec.decimal_places.places == 2
+
+    def test_format_currency_named(self):
+        r = translated('= FORMAT(SUM(Sales[Revenue]), "Currency")')
+        assert isinstance(r.format_spec, CurrencyFormatSpec)
+
+    def test_format_currency_symbol(self):
+        r = translated('= FORMAT(SUM(Sales[Revenue]), "$#,##0.00")')
+        assert isinstance(r.format_spec, CurrencyFormatSpec)
+        assert r.format_spec.currency_code == "USD"
+
+    def test_no_format_call_no_spec(self):
+        r = translated("= SUM(Sales[Amount])")
+        assert r.format_spec is None
+
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format_spec_to_dict serialisation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestFormatSpecToDict:
+    def test_number_dict(self):
+        spec = NumberFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="max", places=2),
+            hide_group_separator=False,
+            abbreviation="compact",
+        )
+        d = format_spec_to_dict(spec)
+        assert d["type"] == "number"
+        assert d["decimal_places"] == {"type": "max", "places": 2}
+        assert "hide_group_separator" not in d  # False is omitted
+        assert d["abbreviation"] == "compact"
+
+    def test_currency_dict(self):
+        spec = CurrencyFormatSpec(
+            currency_code="USD",
+            decimal_places=DecimalPlacesSpec(type="exact", places=2),
+            hide_group_separator=False,
+        )
+        d = format_spec_to_dict(spec)
+        assert d["type"] == "currency"
+        assert d["currency_code"] == "USD"
+        assert d["decimal_places"]["places"] == 2
+
+    def test_percentage_dict(self):
+        spec = PercentageFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="all"),
+            hide_group_separator=True,
+        )
+        d = format_spec_to_dict(spec)
+        assert d["type"] == "percentage"
+        assert d["decimal_places"] == {"type": "all"}
+        assert d["hide_group_separator"] is True
+
+    def test_byte_dict(self):
+        spec = ByteFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="max", places=2),
+        )
+        d = format_spec_to_dict(spec)
+        assert d["type"] == "byte"
+        assert d["decimal_places"]["places"] == 2
+
+    def test_no_decimal_places(self):
+        spec = CurrencyFormatSpec(currency_code="JPY")
+        d = format_spec_to_dict(spec)
+        assert "decimal_places" not in d

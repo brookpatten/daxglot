@@ -178,6 +178,8 @@ class PbixExtractor:
                             expression=str(row.get("Expression", "")),
                             display_folder=str(row.get("DisplayFolder", "")),
                             description=str(row.get("Description", "")),
+                            format_string=str(
+                                row.get("FormatString", "") or ""),
                         )
                     )
         except Exception:  # noqa: BLE001

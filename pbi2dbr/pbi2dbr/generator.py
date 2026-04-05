@@ -214,6 +214,10 @@ def _measure_to_dict(m: Measure) -> dict:
         d["comment"] = m.comment
     if m.display_name and m.display_name != m.name:
         d["display_name"] = m.display_name
+    if m.synonyms:
+        d["synonyms"] = list(m.synonyms)
+    if m.format_spec:
+        d["format"] = m.format_spec
     if m.window:
         d["window"] = m.window
     return d

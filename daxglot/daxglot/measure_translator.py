@@ -21,8 +21,9 @@ Usage::
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, fields, replace
-from typing import Optional
+from typing import Optional, Union
 
 import sqlglot.expressions as exp
 
@@ -78,6 +79,12 @@ _TIME_INTEL_FUNCS = frozenset(
         "PARALLELPERIOD",
         "DATESBETWEEN",
         "DATESINPERIOD",
+        # Gap 4: semiadditive date selectors used as CALCULATE filter arguments
+        "LASTDATE",
+        "FIRSTDATE",
+        # Gap 5: non-blank semiadditive selectors used as CALCULATE filter arguments
+        "LASTNONBLANK",
+        "FIRSTNONBLANK",
     }
 )
 
@@ -87,6 +94,13 @@ _INTERVAL_UNITS = {
     "MONTH": "month",
     "QUARTER": "quarter",
     "YEAR": "year",
+}
+
+# Gap 5: LASTNONBLANKVALUE / FIRSTNONBLANKVALUE — standalone semiadditive aggregators.
+# Syntax: FUNC(date_col, expression)   note: date col is arg[0], expr is arg[1].
+_NONBLANK_VALUE_FUNCS: dict[str, str] = {
+    "LASTNONBLANKVALUE": "last",
+    "FIRSTNONBLANKVALUE": "first",
 }
 
 # Standalone period-aggregate functions that take (expression, date_col, ...) as arguments.
@@ -103,6 +117,182 @@ _STANDALONE_PERIOD_FUNCS: dict[str, tuple[str, str]] = {
     "CLOSINGBALANCEQUARTER": ("quarter", "last"),
     "CLOSINGBALANCEMONTH": ("month", "last"),
 }
+
+# ---------------------------------------------------------------------------
+# Semantic metadata: format specification types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DecimalPlacesSpec:
+    """Controls how many decimal places are displayed."""
+
+    type: str  # "max", "exact", or "all"
+    # required when type is "max" or "exact" (0-10)
+    places: Optional[int] = None
+
+
+@dataclass
+class NumberFormatSpec:
+    """Plain number format for general numeric values."""
+
+    type: str = "number"
+    decimal_places: Optional[DecimalPlacesSpec] = None
+    hide_group_separator: bool = False
+    abbreviation: Optional[str] = None  # "none", "compact", or "scientific"
+
+
+@dataclass
+class CurrencyFormatSpec:
+    """Currency format for monetary values (ISO-4217 currency code required)."""
+
+    type: str = "currency"
+    currency_code: str = "USD"
+    decimal_places: Optional[DecimalPlacesSpec] = None
+    hide_group_separator: bool = False
+    abbreviation: Optional[str] = None  # "none", "compact", or "scientific"
+
+
+@dataclass
+class PercentageFormatSpec:
+    """Percentage format for ratio values expressed as percentages."""
+
+    type: str = "percentage"
+    decimal_places: Optional[DecimalPlacesSpec] = None
+    hide_group_separator: bool = False
+
+
+@dataclass
+class ByteFormatSpec:
+    """Byte format for data size values (KB, MB, GB, …)."""
+
+    type: str = "byte"
+    decimal_places: Optional[DecimalPlacesSpec] = None
+    hide_group_separator: bool = False
+
+
+FormatSpec = Union[NumberFormatSpec, CurrencyFormatSpec,
+                   PercentageFormatSpec, ByteFormatSpec]
+
+
+# Map of currency symbol → ISO-4217 code (ordered longest-first to avoid prefix clashes)
+_CURRENCY_SYMBOL_MAP: dict[str, str] = {
+    "R$": "BRL",
+    "Fr": "CHF",
+    "kr": "SEK",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "¥": "JPY",
+    "₹": "INR",
+    "₩": "KRW",
+    "₣": "CHF",
+}
+
+_PBI_CURRENCY_NAMED = frozenset({"currency", "dollar", "euro", "sterling"})
+_PBI_PERCENTAGE_NAMED = frozenset({"percent", "percentage"})
+_PBI_NUMBER_NAMED = frozenset(
+    {"fixed", "standard", "scientific", "general number", "number"})
+
+# Matches the second argument of a FORMAT() call — handles up to 3 levels of nested parens.
+# e.g. FORMAT(DIVIDE(SUM(x), SUM(y)), "0.00%")  →  group 1 = "0.00%"
+_FORMAT_CALL_RE = re.compile(
+    r'\bFORMAT\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*,\s*["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+
+
+def _count_decimal_places(fmt: str) -> int:
+    """Return the number of decimal places encoded in a format string (e.g. ``'0.00'`` → 2)."""
+    m = re.search(r'\.([0#]+)', fmt)
+    return len(m.group(1)) if m else 0
+
+
+def format_spec_from_pbi_string(fmt_str: str) -> Optional[FormatSpec]:
+    """Convert a Power BI / Tabular model format string to a :class:`FormatSpec`.
+
+    Returns ``None`` when the format string is not recognised or is a general/
+    non-numeric format (e.g. ``"General"`` or a date format).
+
+    Examples::
+
+        format_spec_from_pbi_string("0.00%")      # → PercentageFormatSpec(decimal_places=2)
+        format_spec_from_pbi_string("Currency")   # → CurrencyFormatSpec(currency_code="USD")
+        format_spec_from_pbi_string("$#,##0.00")  # → CurrencyFormatSpec(currency_code="USD")
+        format_spec_from_pbi_string("#,##0")      # → NumberFormatSpec(decimal_places=0)
+    """
+    if not fmt_str:
+        return None
+    fmt = fmt_str.strip()
+    fmt_lower = fmt.lower()
+
+    # --- Percentage ---
+    if fmt_lower in _PBI_PERCENTAGE_NAMED or "%" in fmt:
+        places = _count_decimal_places(fmt)
+        dp = DecimalPlacesSpec(type="exact", places=places)
+        return PercentageFormatSpec(decimal_places=dp)
+
+    # --- Currency (named) ---
+    if fmt_lower in _PBI_CURRENCY_NAMED:
+        return CurrencyFormatSpec(
+            currency_code="USD",
+            decimal_places=DecimalPlacesSpec(type="exact", places=2),
+        )
+
+    # --- Currency (symbol in format string) ---
+    for symbol, code in _CURRENCY_SYMBOL_MAP.items():
+        if symbol in fmt:
+            places = _count_decimal_places(fmt)
+            return CurrencyFormatSpec(
+                currency_code=code,
+                decimal_places=DecimalPlacesSpec(type="exact", places=places),
+                hide_group_separator="," not in fmt,
+            )
+
+    # --- Plain number / named number formats ---
+    if fmt_lower in _PBI_NUMBER_NAMED or any(ch in fmt for ch in ("0", "#")):
+        places = _count_decimal_places(fmt)
+        return NumberFormatSpec(
+            decimal_places=DecimalPlacesSpec(type="exact", places=places),
+            hide_group_separator="," not in fmt,
+        )
+
+    return None
+
+
+def _infer_format_spec_from_dax(dax_text: str) -> Optional[FormatSpec]:
+    """Infer a :class:`FormatSpec` from a DAX expression by looking for FORMAT() calls."""
+    m = _FORMAT_CALL_RE.search(dax_text)
+    if m:
+        return format_spec_from_pbi_string(m.group(1))
+    return None
+
+
+def format_spec_to_dict(spec: FormatSpec) -> dict:
+    """Convert a :class:`FormatSpec` to a plain ``dict`` suitable for YAML serialisation.
+
+    The output matches the Databricks metric view ``format:`` schema (spec version 1.1).
+    """
+    d: dict = {"type": spec.type}
+
+    if isinstance(spec, CurrencyFormatSpec):
+        d["currency_code"] = spec.currency_code
+
+    dp = spec.decimal_places  # type: ignore[union-attr]
+    if dp is not None:
+        dp_dict: dict = {"type": dp.type}
+        if dp.places is not None:
+            dp_dict["places"] = dp.places
+        d["decimal_places"] = dp_dict
+
+    if spec.hide_group_separator:  # type: ignore[union-attr]
+        d["hide_group_separator"] = True
+
+    if isinstance(spec, (NumberFormatSpec, CurrencyFormatSpec)) and spec.abbreviation is not None:
+        d["abbreviation"] = spec.abbreviation
+
+    return d
+
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -138,6 +328,12 @@ class MeasureTranslation:
     original_dax: str = ""
     """Original DAX expression text (set by translate_measure)."""
 
+    synonyms: list[str] = field(default_factory=list)
+    """Alternative names for the measure, used by Genie/LLM discovery."""
+
+    format_spec: Optional[FormatSpec] = None
+    """Format specification for display in visualisation tools (spec version 1.1)."""
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -149,6 +345,9 @@ def translate_measure(
     dialect: str = "databricks",
     date_dimension: str = "date",
     period_dimensions: Optional[dict[str, str]] = None,
+    synonyms: Optional[list[str]] = None,
+    format_spec: Optional[FormatSpec] = None,
+    format_string: Optional[str] = None,
 ) -> MeasureTranslation:
     """Translate a DAX measure expression to Databricks metric view components.
 
@@ -161,10 +360,18 @@ def translate_measure(
             e.g. ``{"year": "order_year", "quarter": "order_quarter", "month": "order_month"}``.
             Used to resolve period-boundary dimension names for YTD/QTD/MTD windows.
             When ``None``, a heuristic name is derived from ``date_dimension`` with a warning.
+        synonyms: Alternative names for the measure (up to 10, max 255 chars each).
+            Propagated verbatim onto the returned :class:`MeasureTranslation`.
+        format_spec: Explicit :class:`FormatSpec` instance.  Takes precedence over
+            ``format_string`` and DAX-inferred formats.
+        format_string: Power BI / Tabular model format string (e.g. ``"0.00%"``,
+            ``"Currency"``, ``"$#,##0.00"``).  Converted automatically when no
+            explicit ``format_spec`` is provided.  Falls back to DAX-expression
+            inference when both are absent.
 
     Returns:
         :class:`MeasureTranslation` containing ``sql_expr``, optional
-        ``window_spec``, and any ``warnings``.
+        ``window_spec``, ``synonyms``, ``format_spec``, and any ``warnings``.
     """
     text = dax_text.strip()
     if not text.startswith("="):
@@ -188,6 +395,20 @@ def translate_measure(
         period_dimensions=period_dimensions,
     )
     result.original_dax = dax_text
+
+    # --- Semantic metadata ---
+    if synonyms:
+        result.synonyms = list(synonyms)
+
+    # Resolve format spec: explicit > format_string > DAX inference
+    resolved_format: Optional[FormatSpec] = format_spec
+    if resolved_format is None and format_string:
+        resolved_format = format_spec_from_pbi_string(format_string)
+    if resolved_format is None:
+        resolved_format = _infer_format_spec_from_dax(text)
+    if resolved_format is not None:
+        result.format_spec = resolved_format
+
     return result
 
 
@@ -223,7 +444,7 @@ def _translate_node(
         return _translate_function_call(node, dialect, date_dimension, period_dimensions)
 
     if isinstance(node, Iterator):
-        return _translate_iterator(node, dialect)
+        return _translate_iterator(node, dialect, date_dimension, period_dimensions)
 
     return _fallback(node, dialect)
 
@@ -240,6 +461,96 @@ def _simple_agg(node: DaxNode, dialect: str) -> MeasureTranslation:
         return _fallback(node, dialect, hint=str(exc))
 
 
+def _resolve_all_lod(
+    modifiers: list[DaxNode],
+    date_dimension: str,
+) -> tuple[list[WindowSpec], list[str]]:
+    """Convert ALL/ALLEXCEPT/RemoveFilters CALCULATE modifiers to coarser-LOD window specs.
+
+    - ALL(table) → range: all on the date dimension (grand total); warns to add other dims.
+    - ALL(table, col1, col2) → range: all on each named column dimension.
+    - ALLEXCEPT(table, keep_col, ...) → range: all on the date dimension; warns about kept dims.
+    - REMOVEFILTERS(col) → range: all on the referenced column dimension.
+    """
+    specs: list[WindowSpec] = []
+    warns: list[str] = []
+
+    for modifier in modifiers:
+        if isinstance(modifier, All):
+            cols = list(modifier.columns)
+            if cols:
+                for col in cols:
+                    dim = col.column.lower().replace(" ", "_") if isinstance(
+                        col, ColumnRef) else date_dimension
+                    specs.append(WindowSpec(
+                        order=dim, range="all", semiadditive="last"))
+            else:
+                specs.append(WindowSpec(order=date_dimension,
+                             range="all", semiadditive="last"))
+                warns.append(
+                    "ALL(table) mapped to range: all on the date dimension — "
+                    "add range: all entries for any other dimensions you want to exclude from grouping"
+                )
+
+        elif isinstance(modifier, AllExcept):
+            keeps = [
+                col.column if isinstance(col, ColumnRef) else "?"
+                for col in modifier.columns
+            ]
+            specs.append(WindowSpec(order=date_dimension,
+                         range="all", semiadditive="last"))
+            keeps_str = ", ".join(keeps) if keeps else "none"
+            warns.append(
+                f"ALLEXCEPT() mapped to range: all on '{date_dimension}' — "
+                f"kept dimensions: [{keeps_str}]; add range: all for each non-kept dimension"
+            )
+
+        elif isinstance(modifier, RemoveFilters):
+            expr = modifier.expr
+            dim = expr.column.lower().replace(" ", "_") if isinstance(
+                expr, ColumnRef) else date_dimension
+            specs.append(WindowSpec(
+                order=dim, range="all", semiadditive="last"))
+
+        elif isinstance(modifier, FunctionCall):
+            fname = modifier.name.upper()
+            if fname == "ALL":
+                col_args = modifier.args[1:] if len(modifier.args) > 1 else []
+                if col_args:
+                    for arg in col_args:
+                        dim = arg.column.lower().replace(" ", "_") if isinstance(
+                            arg, ColumnRef) else date_dimension
+                        specs.append(WindowSpec(
+                            order=dim, range="all", semiadditive="last"))
+                else:
+                    specs.append(WindowSpec(order=date_dimension,
+                                 range="all", semiadditive="last"))
+                    warns.append(
+                        "ALL(table) mapped to range: all on the date dimension — "
+                        "add range: all entries for any other dimensions you want to exclude from grouping"
+                    )
+            elif fname in ("ALLEXCEPT", "ALLNOBLANKROW"):
+                keeps = [
+                    arg.column if isinstance(arg, ColumnRef) else "?"
+                    for arg in modifier.args[1:]
+                ]
+                specs.append(WindowSpec(order=date_dimension,
+                             range="all", semiadditive="last"))
+                keeps_str = ", ".join(keeps) if keeps else "none"
+                warns.append(
+                    f"{fname}() mapped to range: all on '{date_dimension}' — "
+                    f"kept dimensions: [{keeps_str}]; add range: all for each non-kept dimension"
+                )
+            elif fname == "REMOVEFILTERS":
+                arg = modifier.args[0] if modifier.args else None
+                dim = arg.column.lower().replace(" ", "_") if isinstance(
+                    arg, ColumnRef) else date_dimension
+                specs.append(WindowSpec(
+                    order=dim, range="all", semiadditive="last"))
+
+    return specs, warns
+
+
 def _translate_calculate(
     node: Calculate,
     dialect: str,
@@ -249,6 +560,8 @@ def _translate_calculate(
     warnings: list[str] = []
     time_intel: list[FunctionCall] = []
     filter_conditions: list[DaxNode] = []
+    # Gaps 1+2: ALL/ALLEXCEPT/RemoveFilters → coarser-LOD window specs
+    all_modifiers: list[DaxNode] = []
 
     for f in node.filters:
         if isinstance(f, FunctionCall) and f.name.upper() in _TIME_INTEL_FUNCS:
@@ -259,11 +572,8 @@ def _translate_calculate(
             # DAX direct predicate: CALCULATE(SUM(...), Table[col] = "val")
             filter_conditions.append(f)
         elif isinstance(f, (All, AllExcept, RemoveFilters)):
-            fname = type(f).__name__ if not isinstance(
-                f, FunctionCall) else f.name.upper()
-            warnings.append(
-                f"{fname} filter removed — not applicable in metric views (removes filter context)"
-            )
+            # Gaps 1+2: capture for coarser-LOD mapping
+            all_modifiers.append(f)
         elif isinstance(f, KeepFilters):
             # KEEPFILTERS wraps another filter — extract inner
             filter_conditions.append(f.expr)
@@ -271,10 +581,14 @@ def _translate_calculate(
             "ALL",
             "ALLEXCEPT",
             "ALLNOBLANKROW",
-            "ALLSELECTED",
+            "REMOVEFILTERS",
         ):
+            # Gaps 1+2: FunctionCall form of ALL/ALLEXCEPT — capture for LOD mapping
+            all_modifiers.append(f)
+        elif isinstance(f, FunctionCall) and f.name.upper() == "ALLSELECTED":
             warnings.append(
-                f"{f.name.upper()}() filter removed — not applicable in metric views"
+                "ALLSELECTED() filter removed — depends on visual/slicer context, "
+                "not representable in metric views"
             )
         else:
             warnings.append(
@@ -284,6 +598,18 @@ def _translate_calculate(
 
     base = _translate_node(
         node.expr, dialect, date_dimension, period_dimensions)
+
+    # --- Gaps 1+2: ALL/ALLEXCEPT → coarser-LOD range: all window specs ---
+    if all_modifiers and not time_intel:
+        lod_specs, lod_warns = _resolve_all_lod(all_modifiers, date_dimension)
+        warnings.extend(lod_warns)
+        if lod_specs:
+            return MeasureTranslation(
+                sql_expr=base.sql_expr,
+                window_spec=lod_specs,
+                warnings=base.warnings + warnings,
+                is_approximate=base.is_approximate or bool(lod_warns),
+            )
 
     # --- Time-intelligence → window spec ---
     if time_intel:
@@ -466,6 +792,21 @@ def _resolve_window(
             "DATESBETWEEN() pattern not recognised — emitting base aggregate; "
             "supported: DATESBETWEEN(col, STARTOFYEAR(col), LASTDATE(col)) and similar"
         ]
+
+    # Gap 4: LASTDATE / FIRSTDATE as CALCULATE filter → semiadditive current-period window
+    if fname == "LASTDATE":
+        return [WindowSpec(order=date_col, range="current", semiadditive="last")], []
+
+    if fname == "FIRSTDATE":
+        return [WindowSpec(order=date_col, range="current", semiadditive="first")], []
+
+    # Gap 5: LASTNONBLANK / FIRSTNONBLANK as CALCULATE filter
+    # LASTNONBLANK(date_col, expression) → semiadditive last within current period
+    if fname == "LASTNONBLANK":
+        return [WindowSpec(order=date_col, range="current", semiadditive="last")], []
+
+    if fname == "FIRSTNONBLANK":
+        return [WindowSpec(order=date_col, range="current", semiadditive="first")], []
 
     return [], []
 
@@ -673,14 +1014,129 @@ def _translate_function_call(
                 pdim_warns + fy_warns),
         )
 
+    # Gap 5: LASTNONBLANKVALUE / FIRSTNONBLANKVALUE
+    # Syntax: FUNC(date_col, expression)
+    if fname in _NONBLANK_VALUE_FUNCS and len(node.args) >= 2:
+        semiadditive = _NONBLANK_VALUE_FUNCS[fname]
+        inner_result = _translate_node(
+            node.args[1], dialect, date_dimension, period_dimensions)
+        date_col = date_dimension
+        if isinstance(node.args[0], ColumnRef):
+            date_col = node.args[0].column.lower().replace(" ", "_")
+        return MeasureTranslation(
+            sql_expr=inner_result.sql_expr,
+            window_spec=[WindowSpec(
+                order=date_col, range="current", semiadditive=semiadditive)],
+            warnings=inner_result.warnings,
+            is_approximate=inner_result.is_approximate,
+        )
+
+    # Gap 7: MOVINGAVERAGE(expression, window_size, [ORDERBY(date_col), ...])
+    if fname == "MOVINGAVERAGE" and len(node.args) >= 2:
+        n = _extract_int_offset(node.args[1])
+        n = abs(n) if n != 0 else 7
+        inner_result = _translate_node(
+            node.args[0], dialect, date_dimension, period_dimensions)
+        date_col = date_dimension
+        for arg in node.args[2:]:
+            if isinstance(arg, FunctionCall) and arg.name.upper() == "ORDERBY":
+                if arg.args and isinstance(arg.args[0], ColumnRef):
+                    date_col = arg.args[0].column.lower().replace(" ", "_")
+        return MeasureTranslation(
+            sql_expr=inner_result.sql_expr,
+            window_spec=[WindowSpec(
+                order=date_col, range=f"trailing {n} day")],
+            warnings=inner_result.warnings + [
+                f"MOVINGAVERAGE() mapped to trailing {n} day window — "
+                "verify the unit (day assumed); adjust range if a different period is intended"
+            ],
+            is_approximate=True,
+        )
+
+    # Gap 6: WINDOW(from, from_type, to, to_type, table, [ORDERBY(date_col), ...])
+    # Covers the most common DAX WINDOW() patterns and maps them to metric view ranges.
+    if fname == "WINDOW" and len(node.args) >= 4:
+        from_val = _extract_int_offset(node.args[0])
+        from_type = _extract_unit_name(node.args[1]).upper()
+        to_val = _extract_int_offset(node.args[2])
+        to_type = _extract_unit_name(node.args[3]).upper()
+        date_col = date_dimension
+        for arg in node.args[4:]:
+            if isinstance(arg, FunctionCall) and arg.name.upper() == "ORDERBY":
+                if arg.args and isinstance(arg.args[0], ColumnRef):
+                    date_col = arg.args[0].column.lower().replace(" ", "_")
+
+        ws: list[WindowSpec] = []
+        # WINDOW(1, ABS, 0, REL) — from the very first row to current → cumulative
+        if from_type == "ABS" and from_val == 1 and to_type == "REL" and to_val == 0:
+            ws = [WindowSpec(order=date_col, range="cumulative")]
+        # WINDOW(-N, REL, 0, REL) — trailing N periods inclusive of current
+        elif from_type == "REL" and to_type == "REL" and from_val < 0 and to_val == 0:
+            count = abs(from_val)
+            ws = [WindowSpec(order=date_col, range=f"trailing {count} day")]
+        # WINDOW(-N, REL, -1, REL) — trailing N periods exclusive of current
+        elif from_type == "REL" and to_type == "REL" and from_val < 0 and to_val == -1:
+            count = abs(from_val)
+            ws = [WindowSpec(order=date_col, range=f"trailing {count} day")]
+        # WINDOW(0, REL, N, REL) — leading N periods
+        elif from_type == "REL" and to_type == "REL" and from_val == 0 and to_val > 0:
+            ws = [WindowSpec(order=date_col, range=f"leading {to_val} day")]
+
+        if ws:
+            return MeasureTranslation(
+                sql_expr=f"/* WINDOW base — provide aggregate expression */",
+                window_spec=ws,
+                warnings=[
+                    f"WINDOW() mapped to '{ws[0].range}' — replace the expr placeholder "
+                    "with the intended aggregate and verify the unit (day assumed)"
+                ],
+                is_approximate=True,
+            )
+        return MeasureTranslation(
+            sql_expr="/* UNSUPPORTED WINDOW() pattern — manual review required */",
+            warnings=[
+                f"WINDOW() pattern (from={from_val} {from_type}, to={to_val} {to_type}) "
+                "not recognised — manual review required"
+            ],
+            is_approximate=True,
+        )
+
     try:
         return MeasureTranslation(sql_expr=_render(node, dialect))
     except TranspilerError as exc:
         return _fallback(node, dialect, hint=str(exc))
 
 
-def _translate_iterator(node: Iterator, dialect: str) -> MeasureTranslation:
-    """Iterator functions (SUMX, AVERAGEX, etc.) — best-effort via transpiler."""
+def _translate_iterator(
+    node: Iterator,
+    dialect: str,
+    date_dimension: str = "date",
+    period_dimensions: Optional[dict[str, str]] = None,
+) -> MeasureTranslation:
+    """Iterator functions (SUMX, AVERAGEX, etc.) — best-effort via transpiler.
+
+    Special-cases Gap 5: LASTNONBLANKVALUE / FIRSTNONBLANKVALUE, which are
+    iterators in DAX but map cleanly to semiadditive current-period windows.
+    """
+    fname = node.func.upper()
+
+    # Gap 5: LASTNONBLANKVALUE(date_col, expression) / FIRSTNONBLANKVALUE(...)
+    # Iterator node: table_expr=date_col_ref, body=expression
+    if fname in _NONBLANK_VALUE_FUNCS:
+        semiadditive = _NONBLANK_VALUE_FUNCS[fname]
+        date_col = date_dimension
+        if isinstance(node.table_expr, ColumnRef):
+            date_col = node.table_expr.column.lower().replace(" ", "_")
+        inner_result = _translate_node(
+            node.body, dialect, date_dimension, period_dimensions)
+        return MeasureTranslation(
+            sql_expr=inner_result.sql_expr,
+            window_spec=[WindowSpec(
+                order=date_col, range="current", semiadditive=semiadditive)],
+            warnings=inner_result.warnings,
+            is_approximate=inner_result.is_approximate,
+        )
+
     try:
         sql = _render(node, dialect)
         return MeasureTranslation(

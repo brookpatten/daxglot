@@ -51,6 +51,9 @@ class PbiMeasure:
     expression: str       # raw DAX text, may contain leading '='
     display_folder: str = ""
     description: str = ""
+    format_string: str = ""  # Power BI format string, e.g. "0.00%", "Currency"
+    # alternative names for LLM discovery
+    synonyms: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -132,6 +135,9 @@ class Measure:
     is_approximate: bool = False
     original_dax: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
+    synonyms: list[str] = field(default_factory=list)
+    # Databricks metric view format: dict (spec 1.1)
+    format_spec: Optional[dict] = None
 
 
 @dataclass

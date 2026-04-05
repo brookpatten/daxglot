@@ -5,7 +5,12 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from daxglot.measure_translator import MeasureTranslation, WindowSpec, translate_measure
+from daxglot.measure_translator import (
+    MeasureTranslation,
+    WindowSpec,
+    format_spec_to_dict,
+    translate_measure,
+)
 
 from . import console
 from .models import Dimension, FactTable, Join, Measure, PbiMeasure
@@ -74,6 +79,8 @@ class DaxBridge:
             dialect=self._dialect,
             date_dimension=date_dim,
             period_dimensions=self._period_dimensions,
+            synonyms=pbi_measure.synonyms or None,
+            format_string=pbi_measure.format_string or None,
         )
 
         # Post-process: normalise column references
@@ -102,6 +109,9 @@ class DaxBridge:
             is_approximate=result.is_approximate,
             original_dax=dax,
             warnings=result.warnings,
+            synonyms=list(result.synonyms),
+            format_spec=format_spec_to_dict(
+                result.format_spec) if result.format_spec else None,
         )
         console.show_dax(
             pbi_measure.table,
