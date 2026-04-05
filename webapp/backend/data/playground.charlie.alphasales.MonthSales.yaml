@@ -9,4 +9,4 @@ window:
 lineage:
 - table: playground.alpha.sales
   column: total
-  type: UNKNOWN
+  type: TABLE

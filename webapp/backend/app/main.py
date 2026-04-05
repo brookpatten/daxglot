@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routes import collect, compare, convert, measures
+from .routes import collect, compare, convert, measures, similar
 
 app = FastAPI(title="Measures API", version="0.1.0")
 
@@ -17,6 +17,7 @@ app.include_router(measures.router)
 app.include_router(collect.router)
 app.include_router(convert.router)
 app.include_router(compare.router)
+app.include_router(similar.router)
 
 
 @app.get("/api/health")

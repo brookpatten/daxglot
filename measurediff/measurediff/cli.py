@@ -55,7 +55,7 @@ def cli() -> None:
 )
 @click.option(
     "--max-depth",
-    default=100,
+    default=10,
     show_default=True,
     type=click.IntRange(min=0),
     help=(

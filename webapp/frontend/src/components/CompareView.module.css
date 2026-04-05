@@ -200,6 +200,72 @@
     gap: 0;
 }
 
+/* ---- Measure detail grid (replaces pill row + ExprBlock) ---- */
+
+.measureDetailsGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.detailColumn {
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+}
+
+.detailColumn:first-child {
+    border-right: 1px solid #dee2e6;
+}
+
+.detailColumnHeader {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.detailDisplayName {
+    font-size: 0.78rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.detailSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.detailSectionLabel {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+}
+
+.detailComment {
+    color: #495057;
+    font-style: italic;
+    margin: 0;
+    font-size: 0.82rem;
+}
+
+.detailList {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #495057;
+    font-size: 0.8rem;
+}
+
+.detailList li {
+    margin-bottom: 0.15rem;
+}
+
 /* ---- Dimension blocks ---- */
 .dimBlock {
     border-bottom: 1px solid #f1f3f5;

@@ -18,6 +18,9 @@ MANIFEST
 .venv/
 .uv/
 
+.vite/
+data/
+
 # Virtual environments
 venv/
 env/

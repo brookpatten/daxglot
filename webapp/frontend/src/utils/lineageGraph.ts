@@ -85,10 +85,9 @@ export function hexToRgba(hex: string, alpha: number): string {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Shorten qualified names: keep last two dot-segments (schema.table) */
+/** Return full Unity Catalog name (catalog.schema.table/view). */
 function shortName(full: string): string {
-    const parts = full.split(".");
-    return parts.slice(-2).join(".");
+    return full;
 }
 
 /** Unique table node id */

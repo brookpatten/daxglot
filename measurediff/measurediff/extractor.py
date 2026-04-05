@@ -197,6 +197,7 @@ def _parse_join(raw: dict) -> JoinDefinition:
 
 
 def _parse_dimension(raw: dict) -> DimensionDefinition:
+
     return DimensionDefinition(
         name=raw["name"],
         expr=str(raw.get("expr", "")),

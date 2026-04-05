@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class LineageColumnOut(BaseModel):
@@ -151,7 +151,26 @@ class PairComparisonOut(BaseModel):
 class CompareRequest(BaseModel):
     ids: list[str]
 
+    @field_validator("ids")
+    @classmethod
+    def exactly_two(cls, v: list[str]) -> list[str]:
+        if len(v) != 2:
+            raise ValueError(
+                "Exactly 2 measure ids are required for comparison.")
+        return v
+
 
 class CompareOut(BaseModel):
     measures: list[MeasureOut]
     pairs: list[PairComparisonOut]
+
+
+# ---------------------------------------------------------------------------
+# Similarity search models
+# ---------------------------------------------------------------------------
+
+
+class SimilarMeasureOut(BaseModel):
+    score: float
+    label: str
+    measure: MeasureOut

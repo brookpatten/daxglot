@@ -56,6 +56,7 @@ class MetricViewCollector:
         for full_name in names:
             try:
                 ddl = self.get_ddl(full_name)
+                logger.info("Parsing metric view %s", full_name)
                 results.append(parse_metric_view(full_name, ddl))
             except Exception as exc:
                 logger.warning("Skipping %s — parse error: %s", full_name, exc)

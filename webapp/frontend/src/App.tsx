@@ -5,7 +5,8 @@ import { ConvertPanel } from "./components/ConvertPanel";
 import { MeasureList } from "./components/MeasureList";
 import { useCompare } from "./hooks/useCompare";
 import { useMeasures } from "./hooks/useMeasures";
-import type { MeasureFilters } from "./types/measure";
+import { useSimilar } from "./hooks/useSimilar";
+import type { Measure, MeasureFilters } from "./types/measure";
 import styles from "./App.module.css";
 
 export default function App() {
@@ -18,10 +19,18 @@ export default function App() {
     const [convertOpen, setConvertOpen] = useState(false);
     const { status: cmpStatus, result: cmpResult, error: cmpError, compare, reset: resetCompare } = useCompare();
 
+    const [similarSource, setSimilarSource] = useState<Measure | null>(null);
+    const [similarSourceName, setSimilarSourceName] = useState("");
+    const { status: simStatus, results: simResults, error: simError, findSimilar, reset: resetSimilar } = useSimilar();
+
     function handleToggleSelect(id: string) {
         setSelectedIds((prev) => {
             const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
+            if (next.has(id)) {
+                next.delete(id);
+            } else if (next.size < 2) {
+                next.add(id);
+            }
             return next;
         });
     }
@@ -34,6 +43,19 @@ export default function App() {
     function handleCloseCompare() {
         setCompareOpen(false);
         resetCompare();
+    }
+
+    function handleFindSimilar(id: string) {
+        const measure = measures.find((m) => m.id === id);
+        setSimilarSource(measure ?? null);
+        setSimilarSourceName(measure?.name ?? id);
+        findSimilar(id);
+    }
+
+    function handleClearSimilar() {
+        setSimilarSource(null);
+        setSimilarSourceName("");
+        resetSimilar();
     }
 
     return (
@@ -57,9 +79,18 @@ export default function App() {
                     selectedIds={selectedIds}
                     onToggleSelect={handleToggleSelect}
                     onCompare={handleCompare}
+                    onFindSimilar={handleFindSimilar}
                     onClearSelection={() => setSelectedIds(new Set())}
                     filters={filters}
                     onFiltersChange={setFilters}
+                    similarMode={simStatus !== "idle" ? {
+                        source: similarSource,
+                        sourceName: similarSourceName,
+                        status: simStatus,
+                        results: simResults,
+                        error: simError,
+                    } : undefined}
+                    onClearSimilar={handleClearSimilar}
                 />
             </main>
 

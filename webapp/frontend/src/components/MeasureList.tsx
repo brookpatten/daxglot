@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Measure, MeasureFilters } from "../types/measure";
+import type { SimilarResult } from "../types/similar";
 import { MeasureCard } from "./MeasureCard";
 import styles from "./MeasureList.module.css";
 
@@ -9,6 +10,14 @@ type SortDir = "asc" | "desc";
 const COL_COUNT = 6;
 const PAGE_SIZE = 20;
 
+interface SimilarMode {
+    source: Measure | null;
+    sourceName: string;
+    status: "idle" | "loading" | "success" | "error";
+    results: SimilarResult[];
+    error: string | null;
+}
+
 interface Props {
     measures: Measure[];
     loading: boolean;
@@ -16,9 +25,12 @@ interface Props {
     selectedIds: Set<string>;
     onToggleSelect: (id: string) => void;
     onCompare: () => void;
+    onFindSimilar: (id: string) => void;
     onClearSelection: () => void;
     filters: MeasureFilters;
     onFiltersChange: (f: MeasureFilters) => void;
+    similarMode?: SimilarMode;
+    onClearSimilar?: () => void;
 }
 
 function SortHeader({
@@ -55,9 +67,12 @@ export function MeasureList({
     selectedIds,
     onToggleSelect,
     onCompare,
+    onFindSimilar,
     onClearSelection,
     filters,
     onFiltersChange,
+    similarMode,
+    onClearSimilar,
 }: Props) {
     const [sortCol, setSortCol] = useState<SortCol>(null);
     const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -88,6 +103,9 @@ export function MeasureList({
         });
     }, [measures, sortCol, sortDir]);
 
+    // In similar mode, bypass normal sort/pagination and show source + results
+    const inSimilarMode = similarMode && similarMode.status !== "idle";
+
     const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -105,21 +123,63 @@ export function MeasureList({
         <div>
             <div className={styles.toolbar}>
                 <p className={styles.count}>
-                    {measures.length} measure{measures.length !== 1 ? "s" : ""}
+                    {inSimilarMode
+                        ? similarMode!.results.length > 0
+                            ? `${similarMode!.results.length} similar measure${similarMode!.results.length !== 1 ? "s" : ""}`
+                            : measures.length + ` measure${measures.length !== 1 ? "s" : ""}`
+                        : `${measures.length} measure${measures.length !== 1 ? "s" : ""}`}
                 </p>
-                {selCount >= 2 && (
+
+                {inSimilarMode && (
+                    <div className={styles.similarBanner}>
+                        <span className={styles.similarBannerIcon}>🔍</span>
+                        <span className={styles.similarBannerText}>
+                            Similar to <em>{similarMode!.sourceName}</em>
+                        </span>
+                        <button
+                            className={styles.clearSimilarBtn}
+                            onClick={onClearSimilar}
+                            aria-label="Clear similar filter"
+                        >
+                            ✕ Clear
+                        </button>
+                    </div>
+                )}
+
+                {selCount === 2 && (
                     <div className={styles.compareBar}>
-                        <span className={styles.selCount}>{selCount} selected</span>
+                        <span className={styles.selCount}>2 selected</span>
                         <button className={styles.compareBtn} onClick={onCompare}>
-                            Compare {selCount}
+                            Compare
                         </button>
                         <button className={styles.clearBtn} onClick={onClearSelection}>
                             Clear
                         </button>
                     </div>
                 )}
-                {selCount === 1 && (
-                    <span className={styles.selHint}>Select one more to compare</span>
+                {selCount === 1 && !inSimilarMode && (
+                    <div className={styles.compareBar}>
+                        <span className={styles.selCount}>1 selected</span>
+                        <button
+                            className={styles.similarBtn}
+                            onClick={() => onFindSimilar(Array.from(selectedIds)[0])}
+                        >
+                            Find Similar
+                        </button>
+                        <span className={styles.selHint}>or select one more to compare</span>
+                        <button className={styles.clearBtn} onClick={onClearSelection}>
+                            Clear
+                        </button>
+                    </div>
+                )}
+                {selCount === 1 && inSimilarMode && (
+                    <div className={styles.compareBar}>
+                        <span className={styles.selCount}>1 selected</span>
+                        <span className={styles.selHint}>select one more to compare</span>
+                        <button className={styles.clearBtn} onClick={onClearSelection}>
+                            Clear
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -204,7 +264,48 @@ export function MeasureList({
                         </tr>
                     </thead>
                     <tbody>
-                        {paginated.length === 0 ? (
+                        {inSimilarMode ? (
+                            similarMode!.status === "loading" ? (
+                                <tr className={styles.similarLoadingRow}>
+                                    <td colSpan={COL_COUNT}>Searching for similar measures…</td>
+                                </tr>
+                            ) : similarMode!.status === "error" ? (
+                                <tr className={styles.similarErrorRow}>
+                                    <td colSpan={COL_COUNT}>{similarMode!.error}</td>
+                                </tr>
+                            ) : similarMode!.results.length === 0 ? (
+                                <tr>
+                                    <td colSpan={COL_COUNT} className={styles.emptyCell}>
+                                        No similar measures found.
+                                    </td>
+                                </tr>
+                            ) : (
+                                <>
+                                    {similarMode!.source && (
+                                        <MeasureCard
+                                            key={similarMode!.source.id}
+                                            measure={similarMode!.source}
+                                            selected={selectedIds.has(similarMode!.source.id)}
+                                            onToggleSelect={onToggleSelect}
+                                            selectDisabled={selCount === 2 && !selectedIds.has(similarMode!.source.id)}
+                                            colCount={COL_COUNT}
+                                            isSource
+                                        />
+                                    )}
+                                    {similarMode!.results.map(({ score, label, measure }) => (
+                                        <MeasureCard
+                                            key={measure.id}
+                                            measure={measure}
+                                            selected={selectedIds.has(measure.id)}
+                                            onToggleSelect={onToggleSelect}
+                                            selectDisabled={selCount === 2 && !selectedIds.has(measure.id)}
+                                            colCount={COL_COUNT}
+                                            similarScore={{ score, label }}
+                                        />
+                                    ))}
+                                </>
+                            )
+                        ) : paginated.length === 0 ? (
                             <tr>
                                 <td colSpan={COL_COUNT} className={styles.emptyCell}>
                                     No measures found.
@@ -217,6 +318,7 @@ export function MeasureList({
                                     measure={m}
                                     selected={selectedIds.has(m.id)}
                                     onToggleSelect={onToggleSelect}
+                                    selectDisabled={selCount === 2 && !selectedIds.has(m.id)}
                                     colCount={COL_COUNT}
                                 />
                             ))
@@ -225,7 +327,7 @@ export function MeasureList({
                 </table>
             </div>
 
-            {totalPages > 1 && (
+            {!inSimilarMode && totalPages > 1 && (
                 <div className={styles.pager}>
                     <button
                         className={styles.pageBtn}

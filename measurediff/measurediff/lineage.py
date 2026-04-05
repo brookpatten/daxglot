@@ -40,11 +40,20 @@ class LineageCollector:
     def __init__(self, spark, max_depth: int = 10) -> None:
         self._spark = spark
         self._max_depth = max_depth
-        # In-memory cache: (target_table, target_column) → list of upstream tuples.
+        # Per-column upstream cache: (target_table, target_column) → upstream rows.
         # None means "already queried, no results".
         self._cache: dict[
             tuple[str, str], Optional[list[tuple[str, str, str]]]
         ] = {}
+        # Node result cache: avoids exponential re-traversal of shared DAG nodes.
+        # The same (table, column) can appear on many branches; caching the fully
+        # built LineageColumn converts O(branches^depth) calls to O(unique nodes).
+        self._node_cache: dict[tuple[str, str], LineageColumn] = {}
+        # Tracks tables whose lineage has already been bulk-fetched.  The first
+        # time any column of a given table is looked up we fetch ALL columns of
+        # that table in one SQL query, populating _cache for each one.  This
+        # reduces round-trips from O(unique columns) to O(unique tables).
+        self._fetched_tables: set[str] = set()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -164,6 +173,12 @@ class LineageCollector:
         """
         key = (table, column)
 
+        # Return a previously-built node to avoid exponential re-traversal.
+        # Shared DAG nodes (columns that feed multiple targets) would otherwise
+        # be re-explored once per branch they appear in.
+        if key in self._node_cache:
+            return self._node_cache[key]
+
         if key in visited or depth >= self._max_depth:
             # Return a leaf — do not recurse further.
             return LineageColumn(
@@ -175,12 +190,14 @@ class LineageCollector:
 
         upstream_rows = self._get_upstream(table, column)
         if not upstream_rows:
-            return LineageColumn(
+            node = LineageColumn(
                 table=table,
                 column=column,
                 type=entity_type or "UNKNOWN",
                 upstream=(),
             )
+            self._node_cache[key] = node
+            return node
 
         new_visited = visited | {key}
         upstream_nodes = tuple(
@@ -195,52 +212,82 @@ class LineageCollector:
         # in (the src_type from our parent's query).
         resolved_type = entity_type or "UNKNOWN"
 
-        return LineageColumn(
+        node = LineageColumn(
             table=table,
             column=column,
             type=resolved_type,
             upstream=upstream_nodes,
         )
+        self._node_cache[key] = node
+        return node
 
     def _get_upstream(
         self, target_table: str, target_column: str
     ) -> list[tuple[str, str, str]]:
-        """Query ``system.access.column_lineage`` for upstream sources.
+        """Return upstream sources for a single column, using a per-table cache.
 
-        Returns a deduplicated list of ``(source_table, source_column, source_type)``
-        tuples.  Returns an empty list when no lineage exists or the query fails.
-
-        Results are cached per ``(target_table, target_column)`` pair.
+        The first time any column of *target_table* is requested, the entire
+        table's lineage is fetched in one SQL query (``_prefetch_table``).  All
+        subsequent lookups for columns of the same table are served from cache,
+        reducing round-trips from O(unique columns) to O(unique tables).
         """
         key = (target_table, target_column)
         if key in self._cache:
             cached = self._cache[key]
             return cached if cached is not None else []
 
+        # Bulk-fetch all columns for this table if not done yet.
+        if target_table not in self._fetched_tables:
+            self._prefetch_table(target_table)
+
+        cached = self._cache.get(key)
+        return cached if cached is not None else []
+
+    def _prefetch_table(
+        self, target_table: str
+    ) -> None:
+        """Fetch column lineage for every column of *target_table* in one query.
+
+        Populates ``self._cache`` for all ``(target_table, column)`` pairs found.
+        Marks the table as fetched even when no rows are returned so repeated
+        misses never trigger a second query.
+        """
+        self._fetched_tables.add(target_table)
         try:
             rows = self._spark.sql(
                 f"""
                 SELECT DISTINCT
+                    target_column_name,
                     source_table_full_name,
                     source_column_name,
                     source_type
                 FROM {_COLUMN_LINEAGE_TABLE}
                 WHERE target_table_full_name = '{_escape(target_table)}'
-                  AND target_column_name     = '{_escape(target_column)}'
                   AND source_table_full_name IS NOT NULL
                   AND source_column_name     IS NOT NULL
                 """
             ).collect()
         except Exception as exc:
             logger.warning(
-                "Lineage query failed for %s.%s: %s", target_table, target_column, exc
+                "Lineage prefetch failed for table %s: %s", target_table, exc
             )
-            self._cache[key] = None
-            return []
+            return
 
-        result = [(r[0], r[1], r[2] or "UNKNOWN") for r in rows]
-        self._cache[key] = result if result else None
-        return result
+        # Group rows by target column and populate per-column cache.
+        grouped: dict[str, list[tuple[str, str, str]]] = {}
+        for row in rows:
+            col = row[0]
+            entry = (row[1], row[2], row[3] or "UNKNOWN")
+            grouped.setdefault(col, []).append(entry)
+
+        for col, upstreams in grouped.items():
+            self._cache[(target_table, col)] = upstreams
+
+        logger.debug(
+            "Prefetched lineage for %s: %d column(s) with upstream data",
+            target_table,
+            len(grouped),
+        )
 
 
 def _escape(value: str) -> str:

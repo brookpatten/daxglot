@@ -84,6 +84,60 @@
     white-space: pre-wrap;
 }
 
+/* ── Similarity badges ────────────────────────────── */
+
+.nameBadges {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.sourceBadge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #495057;
+    background: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 10px;
+    padding: 0.1rem 0.5rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.scoreBadge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 0.1rem 0.5rem;
+}
+
+.badgeIdentical {
+    color: #145523;
+    background: #d1e7dd;
+    border: 1px solid #a3cfbb;
+}
+
+.badgeSimilar {
+    color: #664d03;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+}
+
+.badgeDifferent {
+    color: #842029;
+    background: #f8d7da;
+    border: 1px solid #f5c2c7;
+}
+
+.rowSource {
+    background: #f0f7ff;
+}
+
+.rowSource:hover {
+    background: #e3f0ff;
+}
+
 .expandCell {
     width: 36px;
     text-align: center;

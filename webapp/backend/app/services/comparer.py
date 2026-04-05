@@ -30,10 +30,10 @@ def run_compare(ids: list[str]) -> CompareOut:
         HTTPException 404: If any requested id is not found.
         HTTPException 400: If fewer than 2 ids supplied.
     """
-    if len(ids) < 2:
+    if len(ids) != 2:
         raise HTTPException(
             status_code=400,
-            detail="At least 2 measure ids are required for comparison.",
+            detail="Exactly 2 measure ids are required for comparison.",
         )
 
     try:

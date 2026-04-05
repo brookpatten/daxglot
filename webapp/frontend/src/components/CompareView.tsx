@@ -26,83 +26,83 @@ function scoreColor(score: number) {
 
 const PILL_COLORS = ["#6f42c1", "#0d6efd", "#198754", "#dc3545", "#fd7e14", "#0dcaf0"];
 
-function MeasurePills({ measures }: { measures: Measure[] }) {
-    return (
-        <div
-            className={styles.measuresRow}
-            style={{ gridTemplateColumns: `repeat(${Math.min(measures.length, 2)}, 1fr)` }}
-        >
-            {measures.map((m, i) => (
-                <div key={m.id} className={styles.measurePill}>
-                    <span
-                        className={styles.pillLabel}
-                        style={{ background: PILL_COLORS[i % PILL_COLORS.length] }}
-                    >
-                        {String.fromCharCode(65 + i)}
-                    </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
-                            <span className={styles.pillName}>{m.name}</span>
-                            {m.display_name && (
-                                <span style={{ fontSize: "0.8rem", color: "#6c757d", fontStyle: "italic" }}>
-                                    {m.display_name}
-                                </span>
-                            )}
-                            <span className={styles.pillView}>{m.metric_view}</span>
-                        </div>
-                        <code className={styles.pillExpr}>{m.expr}</code>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 // ---------------------------------------------------------------------------
-// Expression diff
+// Per-measure detail columns inside each pair card
 // ---------------------------------------------------------------------------
 
-function ExprBlock({ pair }: { pair: PairComparison }) {
-    const [open, setOpen] = useState(!pair.expr.same);
-    const { expr } = pair;
+function MeasureDetailColumn({
+    measure,
+    letterIdx,
+    normalizedExpr,
+    exprSame,
+    colors,
+}: {
+    measure: Measure;
+    letterIdx: number;
+    normalizedExpr: string;
+    exprSame: boolean;
+    colors: string[];
+}) {
+    const color = colors[letterIdx % colors.length];
+    const normalizedDiffersFromRaw = normalizedExpr.trim() !== measure.expr.trim();
 
     return (
-        <div className={styles.dimBlock}>
-            <div className={styles.dimHeader} onClick={() => setOpen((o) => !o)}>
-                <span className={styles.dimTitle}>Expression</span>
-                <span className={`${styles.dimSame} ${expr.same ? styles.same : styles.diff}`}>
-                    {expr.same ? "Identical" : "Different"}
+        <div className={styles.detailColumn}>
+            <div className={styles.detailColumnHeader}>
+                <span className={styles.pillLabel} style={{ background: color }}>
+                    {String.fromCharCode(65 + letterIdx)}
                 </span>
-                <span className={styles.dimToggle}>{open ? "▲" : "▼"}</span>
+                <span className={styles.pillName}>{measure.name}</span>
+                {measure.display_name && (
+                    <span className={styles.detailDisplayName}>{measure.display_name}</span>
+                )}
             </div>
-            {open && (
-                <div className={styles.dimBody}>
-                    <div className={styles.sideBySide}>
-                        <div className={styles.sideBox}>
-                            <span className={styles.sideLabel}>{pair.name_a} (normalized)</span>
-                            <pre className={expr.same ? styles.codeSame : styles.codeDiff}>
-                                {expr.normalized_a}
-                            </pre>
-                        </div>
-                        <div className={styles.sideBox}>
-                            <span className={styles.sideLabel}>{pair.name_b} (normalized)</span>
-                            <pre className={expr.same ? styles.codeSame : styles.codeDiff}>
-                                {expr.normalized_b}
-                            </pre>
-                        </div>
-                    </div>
-                    {!expr.same && (
-                        <div className={styles.sideBySide} style={{ marginTop: "0.5rem" }}>
-                            <div className={styles.sideBox}>
-                                <span className={styles.sideLabel}>{pair.name_a} (raw)</span>
-                                <pre className={styles.codeDiff}>{expr.raw_a}</pre>
-                            </div>
-                            <div className={styles.sideBox}>
-                                <span className={styles.sideLabel}>{pair.name_b} (raw)</span>
-                                <pre className={styles.codeDiff}>{expr.raw_b}</pre>
-                            </div>
-                        </div>
-                    )}
+            <span className={styles.pillView}>{measure.metric_view}</span>
+
+            <div className={styles.detailSection}>
+                <span className={styles.detailSectionLabel}>Expression</span>
+                <pre className={exprSame ? styles.codeSame : styles.codeDiff}>{measure.expr}</pre>
+                {normalizedDiffersFromRaw && (
+                    <>
+                        <span className={styles.detailSectionLabel} style={{ marginTop: "0.35rem" }}>
+                            Normalized
+                        </span>
+                        <pre className={exprSame ? styles.codeSame : styles.codeDiff}>
+                            {normalizedExpr}
+                        </pre>
+                    </>
+                )}
+            </div>
+
+            {measure.comment && (
+                <div className={styles.detailSection}>
+                    <span className={styles.detailSectionLabel}>Comment</span>
+                    <p className={styles.detailComment}>{measure.comment}</p>
+                </div>
+            )}
+
+            {measure.window.length > 0 && (
+                <div className={styles.detailSection}>
+                    <span className={styles.detailSectionLabel}>Window specs</span>
+                    <ul className={styles.detailList}>
+                        {measure.window.map((w, i) => (
+                            <li key={i}>
+                                <strong>{w.order}</strong> — {w.range}
+                                {w.semiadditive && <em> ({w.semiadditive})</em>}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {measure.referenced_measures.length > 0 && (
+                <div className={styles.detailSection}>
+                    <span className={styles.detailSectionLabel}>References</span>
+                    <ul className={styles.detailList}>
+                        {measure.referenced_measures.map((ref, i) => (
+                            <li key={i}><code>{ref}</code></li>
+                        ))}
+                    </ul>
                 </div>
             )}
         </div>
@@ -276,6 +276,8 @@ function PairCard({
 }) {
     const idxA = measures.findIndex((m) => m.id === pair.id_a);
     const idxB = measures.findIndex((m) => m.id === pair.id_b);
+    const mA = measures.find((m) => m.id === pair.id_a);
+    const mB = measures.find((m) => m.id === pair.id_b);
 
     return (
         <div className={styles.pairSection}>
@@ -289,9 +291,7 @@ function PairCard({
                     <span style={{ color: "#6c757d", fontWeight: 400 }}> vs </span>
                     <span style={{ color: colors[idxB % colors.length] }}>{pair.name_b}</span>
                 </h3>
-                <span
-                    className={`${styles.scoreBadge} ${labelClass(pair.label)}`}
-                >
+                <span className={`${styles.scoreBadge} ${labelClass(pair.label)}`}>
                     {pair.label}
                 </span>
                 <span
@@ -302,8 +302,28 @@ function PairCard({
                 </span>
             </div>
 
+            <div className={styles.measureDetailsGrid}>
+                {mA && (
+                    <MeasureDetailColumn
+                        measure={mA}
+                        letterIdx={idxA}
+                        normalizedExpr={pair.expr.normalized_a}
+                        exprSame={pair.expr.same}
+                        colors={colors}
+                    />
+                )}
+                {mB && (
+                    <MeasureDetailColumn
+                        measure={mB}
+                        letterIdx={idxB}
+                        normalizedExpr={pair.expr.normalized_b}
+                        exprSame={pair.expr.same}
+                        colors={colors}
+                    />
+                )}
+            </div>
+
             <div className={styles.pairBody}>
-                <ExprBlock pair={pair} />
                 <WindowBlock pair={pair} />
                 <LineageBlock pair={pair} measures={measures} colors={colors} />
             </div>
@@ -330,7 +350,6 @@ export function CompareView({ selectedIds, result, status, error, onClose }: Pro
                 <div className={styles.modalHeader}>
                     <h2 className={styles.modalTitle}>
                         Measure Comparison
-                        {result && ` — ${result.measures.length} measures, ${result.pairs.length} pair${result.pairs.length !== 1 ? "s" : ""}`}
                     </h2>
                     <button className={styles.closeBtn} onClick={onClose} aria-label="Close">✕</button>
                 </div>
@@ -345,7 +364,6 @@ export function CompareView({ selectedIds, result, status, error, onClose }: Pro
 
                 {status === "success" && result && (
                     <div className={styles.modalBody}>
-                        <MeasurePills measures={result.measures} />
                         {result.pairs.map((pair) => (
                             <PairCard
                                 key={`${pair.id_a}:${pair.id_b}`}

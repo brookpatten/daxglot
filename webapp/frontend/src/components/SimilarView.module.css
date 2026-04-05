@@ -1,0 +1,208 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 1000;
+    padding: 2rem 1rem;
+    overflow-y: auto;
+}
+
+.modal {
+    background: #fff;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 1000px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.15s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+    gap: 1rem;
+}
+
+.modalTitle {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #212529;
+    flex: 1;
+    margin: 0;
+}
+
+.modalTitle em {
+    font-style: normal;
+    color: #6f42c1;
+}
+
+.closeBtn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #6c757d;
+    line-height: 1;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
+.closeBtn:hover {
+    background: #f8f9fa;
+    color: #212529;
+}
+
+.body {
+    overflow-x: auto;
+}
+
+.state {
+    padding: 3rem;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+
+.errorState {
+    color: #dc3545;
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.table thead tr {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table thead th {
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.row {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.row:last-child {
+    border-bottom: none;
+}
+
+.row:hover {
+    background: #faf5ff;
+}
+
+.tdScore {
+    padding: 0.55rem 0.75rem;
+    white-space: nowrap;
+    width: 5rem;
+}
+
+.tdName {
+    padding: 0.55rem 0.75rem;
+    width: 18rem;
+}
+
+.tdMv {
+    padding: 0.55rem 0.75rem;
+    color: #495057;
+    font-size: 0.82rem;
+}
+
+.tdExpr {
+    padding: 0.55rem 0.75rem;
+    max-width: 28rem;
+}
+
+.thScore {
+    width: 5rem;
+    padding: 0.55rem 0.75rem;
+}
+
+.thName {
+    width: 18rem;
+    padding: 0.55rem 0.75rem;
+}
+
+.thMv {
+    padding: 0.55rem 0.75rem;
+}
+
+.thExpr {
+    padding: 0.55rem 0.75rem;
+}
+
+/* ── Score badge ───────────────────────────────────────────── */
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.badgeIdentical {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.badgeSimilar {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.badgeDifferent {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* ── Name / expr cells ─────────────────────────────────────── */
+
+.name {
+    font-weight: 600;
+    color: #212529;
+    display: block;
+}
+
+.displayName {
+    font-size: 0.78rem;
+    color: #6c757d;
+    font-style: italic;
+    display: block;
+}
+
+.expr {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.78rem;
+    color: #495057;
+    white-space: pre-wrap;
+    word-break: break-all;
+}

@@ -20,7 +20,9 @@
 			"version": "3.12"
 		},
 		"ghcr.io/jsburckhardt/devcontainer-features/uv:1": {},
-		"ghcr.io/devcontainers/features/node:1": {}
+		"ghcr.io/devcontainers/features/node:1": {},
+		// "ghcr.io/devcontainer-community/devcontainer-features/opencode.ai:1": {},
+		// "ghcr.io/prulloac/devcontainer-features/ollama:1": {}
 	},
 	// "overrideFeatureInstallOrder": [
 	// 	"ghcr.io/devcontainers/features/python",
