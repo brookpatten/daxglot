@@ -1,10 +1,6 @@
-# daxglot / pbi2dbr
+# daxglot / pbi2dbr / measurediff / powermglot
 
-A webapp, library, & cli for converting **PowerBI semantic models** (`.pbix` files) into **Databricks Unity Catalog metric views** and comparing and governing measures.
-
-![screenshot](./doc/webapp.png)
-
-![screenshot](./doc/webapp-diff.png)
+A webapp, library, & cli for collecting, comparing, and governing databricks metric views, including converting from **PowerBI semantic models** (`.pbix` files).
 
 The project is split into multiple packages:
 
@@ -15,6 +11,14 @@ The project is split into multiple packages:
 | `pbi2dbr` | CLI + library that extracts a PBIX model, classifies fact/dimension tables, translates DAX measures to SQL, and emits metric-view YAML and DDL || `measurediff` | Collects metric view measure definitions from Databricks Unity Catalog (with recursive column lineage) and compares them to identify what is the same, different, or equivalent |
 | `measurediff` | Extract, Compare & Contrast unity catalog metric view measures including upstream lineage |
 | `webapp` | FastAPI Backend and React Frontend for web UI that provides all of the above |
+---
+
+## Web App
+
+![screenshot](./doc/webapp.png)
+
+![screenshot](./doc/webapp-diff.png)
+
 ---
 
 ## How PowerBI Conversion Works
@@ -418,63 +422,6 @@ result = translate_measure(
 print(result.sql_expr)      # SUM(Amount)
 print(result.window_spec)   # [WindowSpec(order='date', range='trailing 1 year', ...)]
 print(result.warnings)      # []
-```
-
----
-
-## Project structure
-
-```
-daxglot/                  # core DAX→SQL library
-  tokens.py               # lexer
-  parser.py               # recursive-descent parser → AST
-  ast_nodes.py            # frozen dataclass AST node types
-  transpiler.py           # AST → sqlglot expression tree
-  measure_translator.py   # high-level DAX measure → SQL + window spec
-
-powermglot/               # Power Query M parser and SQL transpiler
-  powermglot/
-    lexer.py              # M tokeniser
-    parser.py             # recursive-descent M parser → AST
-    ast_nodes.py          # M AST node types
-    transpiler.py         # AST → SQL (m_to_sql, parse_m_source, MSourceInfo)
-
-pbi2dbr/                  # PBIX conversion library + CLI
-  pbi2dbr/
-    models.py             # SemanticModel, FactTable, MetricViewSpec, …
-    extractor.py          # PBIX → SemanticModel (via pbixray + powermglot)
-    analyzer.py           # fact/dim classification, join-tree building
-    translator.py         # DAX measures → Measure objects (wraps daxglot)
-    generator.py          # MetricViewSpec → YAML + SQL DDL
-    cli.py                # `pbi2dbr convert` / `pbi2dbr inspect` commands
-
-tests/
-  unit/
-    test_daxparser.py
-    test_measure_translator.py
-
-pbi2dbr/tests/
-  test_analyzer.py
-  test_extractor.py
-  test_generator.py
-  test_integration.py     # end-to-end tests against real .pbix files
-
-measurediff/              # Unity Catalog metric view collection + diffing
-  measurediff/
-    models.py             # LineageColumn, MeasureDefinition, MetricViewDefinition, …
-    collector.py          # discover metric views + fetch DDL via Spark
-    extractor.py          # parse metric view DDL and SQL expressions (no Spark)
-    lineage.py            # recursive lineage enrichment from system.access.column_lineage
-    serializer.py         # write per-measure YAML files
-    loader.py             # read per-measure YAML files back into models
-    comparator.py         # expression / window / lineage comparison + similarity score
-    display.py            # rich terminal diff renderer
-    cli.py                # `measurediff collect` / `measurediff diff` commands
-  tests/unit/
-    test_extractor.py
-    test_models.py
-    test_serializer.py
-    test_comparator.py
 ```
 
 ---
