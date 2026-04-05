@@ -12,19 +12,21 @@ from typing import Any
 
 import yaml
 
-from .models import LineageColumn, MeasureDefinition, WindowSpec
+from .models import DimensionDefinition, LineageColumn, MeasureDefinition, WindowSpec
 
 
-def load_measure_yaml(path: str | Path) -> tuple[str, MeasureDefinition]:
-    """Load a per-measure YAML file and return ``(metric_view_full_name, measure)``.
+def load_measure_yaml(path: str | Path) -> tuple[str, MeasureDefinition, str, list[DimensionDefinition]]:
+    """Load a per-measure YAML file and return ``(metric_view_name, measure, source_table, dimensions)``.
 
     Args:
         path: Path to a YAML file produced by
               :func:`~measurediff.serializer.write_measures`.
 
     Returns:
-        A two-tuple of the metric view full name (string) and the
-        :class:`~measurediff.models.MeasureDefinition`.
+        A four-tuple of the metric view full name (string), the
+        :class:`~measurediff.models.MeasureDefinition`, the source table
+        full name (string, empty string if absent), and the list of
+        :class:`~measurediff.models.DimensionDefinition` for the metric view.
 
     Raises:
         ValueError: If the file is missing required fields.
@@ -69,7 +71,18 @@ def load_measure_yaml(path: str | Path) -> tuple[str, MeasureDefinition]:
         referenced_measures=referenced_measures,
     )
 
-    return str(metric_view), measure
+    source_table: str = doc.get("source_table") or ""
+    dimensions: list[DimensionDefinition] = [
+        DimensionDefinition(
+            name=d["name"],
+            expr=d["expr"],
+            comment=d.get("comment"),
+            display_name=d.get("display_name"),
+        )
+        for d in (doc.get("dimensions") or [])
+    ]
+
+    return str(metric_view), measure, source_table, dimensions
 
 
 def _load_lineage_column(node: dict[str, Any]) -> LineageColumn:

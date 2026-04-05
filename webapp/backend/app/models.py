@@ -15,6 +15,11 @@ class LineageColumnOut(BaseModel):
 LineageColumnOut.model_rebuild()
 
 
+class DimensionOut(BaseModel):
+    name: str
+    expr: str
+
+
 class WindowSpecOut(BaseModel):
     order: str
     range: str
@@ -24,6 +29,8 @@ class WindowSpecOut(BaseModel):
 class MeasureOut(BaseModel):
     id: str  # filename stem, e.g. "prod.finance.sales_metrics.total_revenue"
     metric_view: str
+    source_table: str = ""
+    dimensions: list[DimensionOut] = []
     name: str
     expr: str
     comment: Optional[str] = None

@@ -5,6 +5,11 @@ export interface LineageColumn {
     upstream: LineageColumn[];
 }
 
+export interface DimensionDefinition {
+    name: string;
+    expr: string;
+}
+
 export interface WindowSpec {
     order: string;
     range: string;
@@ -14,6 +19,8 @@ export interface WindowSpec {
 export interface Measure {
     id: string;
     metric_view: string;
+    source_table: string;
+    dimensions: DimensionDefinition[];
     name: string;
     expr: string;
     comment?: string;
@@ -25,6 +32,7 @@ export interface Measure {
 
 export interface MeasureFilters {
     name?: string;
+    display_name?: string;
     metric_view?: string;
     catalog?: string;
     schema?: string;

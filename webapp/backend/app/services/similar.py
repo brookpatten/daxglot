@@ -39,7 +39,7 @@ def run_similar(measure_id: str) -> list[SimilarMeasureOut]:
             status_code=404,
             detail=f"Measure '{measure_id}' not found.",
         )
-    target_view, target_def = load_measure_yaml(target_path)
+    target_view, target_def, _, _ = load_measure_yaml(target_path)
 
     # Load all other measures and compare
     results: list[SimilarMeasureOut] = []
@@ -52,7 +52,8 @@ def run_similar(measure_id: str) -> list[SimilarMeasureOut]:
             continue
 
         try:
-            candidate_view, candidate_def = load_measure_yaml(candidate_path)
+            candidate_view, candidate_def, _, _ = load_measure_yaml(
+                candidate_path)
             cmp = compare_measures(
                 target_view, target_def, candidate_view, candidate_def)
             if cmp.score > 0:

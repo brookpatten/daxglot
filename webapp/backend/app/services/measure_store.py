@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Optional
 
 from measurediff.loader import load_measure_yaml
-from measurediff.models import LineageColumn, MeasureDefinition
+from measurediff.models import LineageColumn, MeasureDefinition, DimensionDefinition
 
 from ..config import settings
-from ..models import LineageColumnOut, MeasureOut, WindowSpecOut
+from ..models import DimensionOut, LineageColumnOut, MeasureOut, WindowSpecOut
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,19 @@ def _lineage_to_out(node: LineageColumn) -> LineageColumnOut:
     )
 
 
-def _measure_to_out(stem: str, metric_view: str, measure: MeasureDefinition) -> MeasureOut:
+def _measure_to_out(
+    stem: str,
+    metric_view: str,
+    measure: MeasureDefinition,
+    source_table: str = "",
+    dimensions: list[DimensionDefinition] | None = None,
+) -> MeasureOut:
     return MeasureOut(
         id=stem,
         metric_view=metric_view,
+        source_table=source_table,
+        dimensions=[DimensionOut(name=d.name, expr=d.expr)
+                    for d in (dimensions or [])],
         name=measure.name,
         expr=measure.expr,
         comment=measure.comment,
@@ -91,8 +100,10 @@ def load_all() -> list[MeasureOut]:
     results: list[MeasureOut] = []
     for path in sorted(measures_dir.glob("*.yaml")):
         try:
-            metric_view, measure = load_measure_yaml(path)
-            results.append(_measure_to_out(path.stem, metric_view, measure))
+            metric_view, measure, source_table, dimensions = load_measure_yaml(
+                path)
+            results.append(_measure_to_out(
+                path.stem, metric_view, measure, source_table, dimensions))
         except Exception as exc:
             logger.warning("Skipping %s — %s", path.name, exc)
     return results
@@ -100,6 +111,7 @@ def load_all() -> list[MeasureOut]:
 
 def search(
     name: Optional[str] = None,
+    display_name: Optional[str] = None,
     metric_view: Optional[str] = None,
     catalog: Optional[str] = None,
     schema: Optional[str] = None,
@@ -112,6 +124,8 @@ def search(
 
     def _matches(m: MeasureOut) -> bool:
         if name and name.lower() not in m.name.lower():
+            return False
+        if display_name and (m.display_name is None or display_name.lower() not in m.display_name.lower()):
             return False
         if metric_view and metric_view.lower() not in m.metric_view.lower():
             return False
@@ -154,8 +168,9 @@ def get_by_id(measure_id: str) -> Optional[MeasureOut]:
     if not path.exists():
         return None
     try:
-        metric_view, measure = load_measure_yaml(path)
-        return _measure_to_out(path.stem, metric_view, measure)
+        metric_view, measure, source_table, dimensions = load_measure_yaml(
+            path)
+        return _measure_to_out(path.stem, metric_view, measure, source_table, dimensions)
     except Exception as exc:
         logger.warning("Failed to load %s — %s", path, exc)
         return None

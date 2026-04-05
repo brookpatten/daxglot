@@ -11,6 +11,7 @@ router = APIRouter(prefix="/api/measures", tags=["measures"])
 @router.get("", response_model=list[MeasureOut])
 def list_measures(
     name: Optional[str] = None,
+    display_name: Optional[str] = None,
     metric_view: Optional[str] = None,
     catalog: Optional[str] = None,
     schema: Optional[str] = None,
@@ -21,6 +22,7 @@ def list_measures(
     """List measures, optionally filtered. All parameters are case-insensitive substrings."""
     return measure_store.search(
         name=name,
+        display_name=display_name,
         metric_view=metric_view,
         catalog=catalog,
         schema=schema,

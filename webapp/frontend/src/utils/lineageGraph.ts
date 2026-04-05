@@ -9,7 +9,7 @@
  * slight bezier curve offset so both colours are visible when shared.
  */
 
-import type { LineageColumn, WindowSpec } from "../types/measure";
+import type { DimensionDefinition, LineageColumn, WindowSpec } from "../types/measure";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -20,6 +20,8 @@ export interface GraphMeasure {
     name: string;
     expr: string;
     metric_view: string;
+    source_table: string;
+    dimensions: DimensionDefinition[];
     lineage: LineageColumn[];
     window: WindowSpec[];
 }
@@ -28,7 +30,7 @@ export interface CyNodeData {
     id: string;
     label: string;
     /** Visual category */
-    type: "table" | "column" | "measure" | "metric_view";
+    type: "catalog" | "schema" | "table" | "column" | "dimension" | "measure" | "metric_view";
     parent?: string;
     /** Full expression (measure nodes only) */
     expr?: string;
@@ -85,9 +87,12 @@ export function hexToRgba(hex: string, alpha: number): string {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Return full Unity Catalog name (catalog.schema.table/view). */
-function shortName(full: string): string {
-    return full;
+/** Parse a fully-qualified name (catalog.schema.local) into its parts. */
+function parseFQN(name: string): { catalog: string | null; schema: string | null; local: string } {
+    const parts = name.split(".");
+    if (parts.length >= 3) return { catalog: parts[0], schema: parts[1], local: parts.slice(2).join(".") };
+    if (parts.length === 2) return { catalog: null, schema: parts[0], local: parts[1] };
+    return { catalog: null, schema: null, local: name };
 }
 
 /** Unique table node id */
@@ -108,6 +113,51 @@ function measureNodeId(id: string) {
 /** Unique metric-view node id (used as a compound parent for the measure) */
 function mvId(metric_view: string) {
     return `mv:${metric_view}`;
+}
+
+/** Unique dimension node id */
+function dimNodeId(metric_view: string, dim_name: string) {
+    return `dim:${metric_view}.${dim_name}`;
+}
+
+/**
+ * Ensure catalog and schema container nodes exist in nodeMap.
+ * Returns their node ids (null if no catalog/schema present in the FQN).
+ */
+function ensureCatalogSchema(
+    catalog: string | null,
+    schema: string | null,
+    measureIdx: number,
+    nodeMap: Map<string, CyNodeData>
+): { catNodeId: string | null; schNodeId: string | null } {
+    let catNodeId: string | null = null;
+    let schNodeId: string | null = null;
+
+    if (catalog) {
+        catNodeId = `cat:${catalog}`;
+        if (!nodeMap.has(catNodeId)) {
+            nodeMap.set(catNodeId, { id: catNodeId, label: catalog + "\n(catalog)", type: "catalog", measures: [] });
+        }
+        const catNode = nodeMap.get(catNodeId)!;
+        if (!catNode.measures!.includes(measureIdx)) catNode.measures!.push(measureIdx);
+    }
+
+    if (schema) {
+        schNodeId = catalog ? `schema:${catalog}.${schema}` : `schema:${schema}`;
+        if (!nodeMap.has(schNodeId)) {
+            nodeMap.set(schNodeId, {
+                id: schNodeId,
+                label: schema + "\n(schema)",
+                type: "schema",
+                parent: catNodeId ?? undefined,
+                measures: [],
+            });
+        }
+        const schNode = nodeMap.get(schNodeId)!;
+        if (!schNode.measures!.includes(measureIdx)) schNode.measures!.push(measureIdx);
+    }
+
+    return { catNodeId, schNodeId };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,15 +181,20 @@ function walkLineage(
     nodeMap: Map<string, CyNodeData>,
     edgeMeasures: Map<string, Set<number>>
 ): void {
+    const { catalog, schema, local: localName } = parseFQN(col.table);
+    const { schNodeId } = ensureCatalogSchema(catalog, schema, measureIdx, nodeMap);
+
     const tId = tableId(col.table);
     const cId = colId(col.table, col.column);
 
-    // Table parent node
+    // Table/view container node (nested inside its schema)
     if (!nodeMap.has(tId)) {
+        const typeLabel = col.type === "VIEW" ? "(view)" : "(table)";
         nodeMap.set(tId, {
             id: tId,
-            label: shortName(col.table) + "\n(table)",
+            label: localName + "\n" + typeLabel,
             type: "table",
+            parent: schNodeId ?? undefined,
             measures: [],
         });
     }
@@ -196,13 +251,16 @@ export function buildLineageElements(
     for (let mi = 0; mi < measures.length; mi++) {
         const m = measures[mi];
 
-        // Metric-view compound node (parent for the measure)
+        // Metric-view compound node (nested inside its schema)
+        const mvParts = parseFQN(m.metric_view);
+        const { schNodeId: mvSchNodeId } = ensureCatalogSchema(mvParts.catalog, mvParts.schema, mi, nodeMap);
         const mvNodeId = mvId(m.metric_view);
         if (!nodeMap.has(mvNodeId)) {
             nodeMap.set(mvNodeId, {
                 id: mvNodeId,
-                label: shortName(m.metric_view) + "\n(metric view)",
+                label: mvParts.local + "\n(metric view)",
                 type: "metric_view",
+                parent: mvSchNodeId ?? undefined,
                 measures: [],
             });
         }
@@ -217,7 +275,7 @@ export function buildLineageElements(
                 : undefined;
             nodeMap.set(mNodeId, {
                 id: mNodeId,
-                label: m.name + "\n(measure)",
+                label: m.expr + "\n(measure)",
                 type: "measure",
                 parent: mvNodeId,
                 expr: m.expr,
@@ -235,12 +293,86 @@ export function buildLineageElements(
         for (const col of m.lineage) {
             walkLineage(col, mNodeId, mi, nodeMap, edgeMeasures);
         }
+
+        // ---------------------------------------------------------------------------
+        // Dimension nodes — one per dimension referenced in window specs
+        // ---------------------------------------------------------------------------
+        const usedDimNames = new Set(m.window.map((w) => w.order).filter(Boolean));
+        for (const dimName of usedDimNames) {
+            const dim = m.dimensions.find((d) => d.name === dimName);
+            if (!dim) continue;
+
+            const dId = dimNodeId(m.metric_view, dim.name);
+            if (!nodeMap.has(dId)) {
+                nodeMap.set(dId, {
+                    id: dId,
+                    label: dim.name + "\n(dimension)",
+                    type: "dimension",
+                    parent: mvNodeId,
+                    measures: [],
+                });
+            }
+            const dNode = nodeMap.get(dId)!;
+            if (!dNode.measures!.includes(mi)) dNode.measures!.push(mi);
+
+            // Edge: dimension → measure
+            const dimMeasureKey = `${dId}--${mNodeId}`;
+            if (!edgeMeasures.has(dimMeasureKey)) edgeMeasures.set(dimMeasureKey, new Set());
+            edgeMeasures.get(dimMeasureKey)!.add(mi);
+
+            // Source column node in the source_table (may be synthetic)
+            if (m.source_table) {
+                const stParts = parseFQN(m.source_table);
+                const { schNodeId: stSchNodeId } = ensureCatalogSchema(stParts.catalog, stParts.schema, mi, nodeMap);
+                const stId = tableId(m.source_table);
+                const scId = colId(m.source_table, dim.expr);
+
+                if (!nodeMap.has(stId)) {
+                    nodeMap.set(stId, {
+                        id: stId,
+                        label: stParts.local + "\n(table)",
+                        type: "table",
+                        parent: stSchNodeId ?? undefined,
+                        measures: [],
+                    });
+                }
+                const stNode = nodeMap.get(stId)!;
+                if (!stNode.measures!.includes(mi)) stNode.measures!.push(mi);
+
+                if (!nodeMap.has(scId)) {
+                    nodeMap.set(scId, {
+                        id: scId,
+                        label: dim.expr + "\n(key)",
+                        type: "column",
+                        parent: stId,
+                        col_type: "DIMENSION",
+                        measures: [],
+                    });
+                }
+                const scNode = nodeMap.get(scId)!;
+                if (!scNode.measures!.includes(mi)) scNode.measures!.push(mi);
+
+                // Edge: source column → dimension
+                const colDimKey = `${scId}--${dId}`;
+                if (!edgeMeasures.has(colDimKey)) edgeMeasures.set(colDimKey, new Set());
+                edgeMeasures.get(colDimKey)!.add(mi);
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------
     // Post-process: assign per-node colours derived from measure ownership
     // ---------------------------------------------------------------------------
     for (const node of nodeMap.values()) {
+        // Catalog/schema containers: no background fill, neutral border
+        if (node.type === "catalog" || node.type === "schema") {
+            node.bgColor = "transparent";
+            node.borderColor = "#adb5bd";
+            node.nodeTextColor = "#6c757d";
+            node.isShared = false;
+            continue;
+        }
+
         const mIdxs = node.measures ?? [];
         const isCompound = node.type === "table" || node.type === "metric_view";
         const alpha = isCompound ? 0.07 : 0.15;

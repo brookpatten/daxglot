@@ -127,15 +127,19 @@ def measure_to_dict(
 ) -> dict:
     """Convert one *measure* to a lineage-focused plain dict.
 
-    The output contains only:
+    The output contains:
     - ``metric_view``: the full three-part name of the source metric view
-      (string, not a nested object — the lineage tree captures the data flow)
+    - ``source_table``: the primary source table/view for the metric view
+    - ``dimensions``: all dimension definitions from the metric view
     - The measure's own fields (name, expr, comment, display_name, window,
       referenced_measures, lineage)
 
     Fields that are None or empty are omitted.
     """
-    doc: dict = {"metric_view": view_def.full_name}
+    doc: dict = {"metric_view": view_def.full_name,
+                 "source_table": view_def.source}
+    if view_def.dimensions:
+        doc["dimensions"] = [_dim_to_dict(d) for d in view_def.dimensions]
     doc.update(_measure_to_dict(measure))
     return doc
 

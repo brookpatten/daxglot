@@ -7,7 +7,7 @@ import styles from "./MeasureList.module.css";
 type SortCol = "name" | "metric_view" | null;
 type SortDir = "asc" | "desc";
 
-const COL_COUNT = 6;
+const COL_COUNT = 5;
 const PAGE_SIZE = 20;
 
 interface SimilarMode {
@@ -188,9 +188,9 @@ export function MeasureList({
                     <thead>
                         <tr>
                             <th className={styles.thCheck}></th>
-                            <th className={styles.thName}>
+                            <th className={styles.thDisplay}>
                                 <SortHeader
-                                    label="Name"
+                                    label="Display Name"
                                     col="name"
                                     sortCol={sortCol}
                                     sortDir={sortDir}
@@ -200,11 +200,10 @@ export function MeasureList({
                                     className={styles.filterInput}
                                     type="text"
                                     placeholder="Filter…"
-                                    value={filters.name ?? ""}
-                                    onChange={(e) => handleFilterChange("name", e.target.value)}
+                                    value={filters.display_name ?? ""}
+                                    onChange={(e) => handleFilterChange("display_name", e.target.value)}
                                 />
                             </th>
-                            <th className={styles.thDisplay}>Display Name</th>
                             <th className={styles.thMv}>
                                 <SortHeader
                                     label="Metric View"

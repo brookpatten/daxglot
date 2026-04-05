@@ -51,8 +51,8 @@ export function MeasureCard({ measure, selected = false, onToggleSelect, selectD
                         />
                     )}
                 </td>
-                <td className={styles.nameCell}>
-                    <span className={styles.name}>{measure.name}</span>
+                <td className={styles.displayNameCell}>
+                    <span className={styles.displayName}>{measure.display_name ?? measure.name}</span>
                     {(isSource || similarScore) && (
                         <div className={styles.nameBadges}>
                             {isSource && <span className={styles.sourceBadge}>Reference</span>}
@@ -62,11 +62,6 @@ export function MeasureCard({ measure, selected = false, onToggleSelect, selectD
                                 </span>
                             )}
                         </div>
-                    )}
-                </td>
-                <td className={styles.displayNameCell}>
-                    {measure.display_name && (
-                        <span className={styles.displayName}>{measure.display_name}</span>
                     )}
                 </td>
                 <td className={styles.mvCell}>
@@ -119,6 +114,8 @@ export function MeasureCard({ measure, selected = false, onToggleSelect, selectD
                                         name: measure.name,
                                         expr: measure.expr,
                                         metric_view: measure.metric_view,
+                                        source_table: measure.source_table,
+                                        dimensions: measure.dimensions,
                                         lineage: measure.lineage,
                                         window: measure.window,
                                     }]}

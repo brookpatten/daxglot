@@ -62,6 +62,11 @@
     border-style: dashed;
 }
 
+.legendSwatchDotted {
+    border-style: dotted;
+    border-color: #adb5bd;
+}
+
 .legendSwatchEllipse {
     display: inline-block;
     width: 13px;
@@ -74,21 +79,16 @@
 
 .legendSwatchHex {
     display: inline-block;
-    width: 13px;
-    height: 13px;
+    width: 18px;
+    height: 11px;
     background: transparent;
-    border: 0;
+    border: 2px solid #adb5bd;
+    border-radius: 3px;
     flex-shrink: 0;
-    /* Hexagon via clip-path; border drawn as colored bg + clip */
-    position: relative;
 }
 
 .legendSwatchHex::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: #adb5bd;
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: none;
 }
 
 .legendEdge {

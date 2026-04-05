@@ -62,16 +62,6 @@ function MeasureDetailColumn({
             <div className={styles.detailSection}>
                 <span className={styles.detailSectionLabel}>Expression</span>
                 <pre className={exprSame ? styles.codeSame : styles.codeDiff}>{measure.expr}</pre>
-                {normalizedDiffersFromRaw && (
-                    <>
-                        <span className={styles.detailSectionLabel} style={{ marginTop: "0.35rem" }}>
-                            Normalized
-                        </span>
-                        <pre className={exprSame ? styles.codeSame : styles.codeDiff}>
-                            {normalizedExpr}
-                        </pre>
-                    </>
-                )}
             </div>
 
             {measure.comment && (
@@ -205,6 +195,8 @@ function LineageBlock({
             name: pair.name_a,
             expr: mA.expr,
             metric_view: pair.view_a,
+            source_table: mA.source_table,
+            dimensions: mA.dimensions,
             lineage: mA.lineage,
             window: mA.window,
         },
@@ -213,10 +205,12 @@ function LineageBlock({
             name: pair.name_b,
             expr: mB.expr,
             metric_view: pair.view_b,
+            source_table: mB.source_table,
+            dimensions: mB.dimensions,
             lineage: mB.lineage,
             window: mB.window,
         },
-    ].filter(Boolean) as { id: string; name: string; expr: string; metric_view: string; lineage: Measure["lineage"]; window: Measure["window"] }[];
+    ].filter(Boolean) as { id: string; name: string; expr: string; metric_view: string; source_table: string; dimensions: Measure["dimensions"]; lineage: Measure["lineage"]; window: Measure["window"] }[];
 
     const graphColors = [
         colors[idxA % colors.length],

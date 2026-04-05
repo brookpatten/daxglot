@@ -57,7 +57,8 @@ def run_compare(ids: list[str]) -> CompareOut:
                 status_code=404,
                 detail=f"Measure '{measure_id}' not found.",
             )
-        metric_view, measure_def = load_measure_yaml(path)
+        metric_view, measure_def, _source_table, _dimensions = load_measure_yaml(
+            path)
         loaded[measure_id] = (metric_view, measure_def)
 
     # MeasureOut objects to return

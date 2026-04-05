@@ -30,13 +30,52 @@ try {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildCyStyle(): any[] {
     return [
+        // ---- catalog container (no fill, solid border) ----
+        {
+            selector: "node[type='catalog']",
+            style: {
+                "background-opacity": 0,
+                "border-color": "#868e96",
+                "border-width": 1.5,
+                "label": "data(label)",
+                "text-valign": "top",
+                "text-halign": "center",
+                "font-size": 11,
+                "font-weight": "bold",
+                "color": "#495057",
+                "text-wrap": "wrap",
+                "text-max-width": "200px",
+                "padding": "32px",
+                "shape": "roundrectangle",
+            },
+        },
+        // ---- schema container (no fill, dotted border) ----
+        {
+            selector: "node[type='schema']",
+            style: {
+                "background-opacity": 0,
+                "border-color": "#adb5bd",
+                "border-width": 1,
+                "border-style": "dotted",
+                "label": "data(label)",
+                "text-valign": "top",
+                "text-halign": "center",
+                "font-size": 10,
+                "font-weight": "bold",
+                "color": "#6c757d",
+                "text-wrap": "wrap",
+                "text-max-width": "180px",
+                "padding": "24px",
+                "shape": "roundrectangle",
+            },
+        },
         // ---- table compound container ----
         {
             selector: "node[type='table']",
             style: {
-                "background-color": "data(bgColor)",
+                "background-opacity": 0,
                 "border-color": "data(borderColor)",
-                "border-width": 2,
+                "border-width": 1.5,
                 "label": "data(label)",
                 "text-valign": "top",
                 "text-halign": "center",
@@ -49,31 +88,32 @@ function buildCyStyle(): any[] {
                 "shape": "roundrectangle",
             },
         },
-        // ---- column nodes (ellipse) ----
+        // ---- column nodes (roundrectangle) ----
         {
             selector: "node[type='column']",
             style: {
-                "background-color": "data(bgColor)",
+                "background-opacity": 0,
                 "border-color": "data(borderColor)",
                 "border-width": 1.5,
                 "label": "data(label)",
                 "text-valign": "center",
                 "text-halign": "center",
-                "font-size": 9,
+                "font-size": 11,
+                "font-weight": "bold",
                 "color": "data(nodeTextColor)",
                 "text-wrap": "wrap",
-                "text-max-width": "90px",
-                "shape": "ellipse",
+                "text-max-width": "110px",
+                "shape": "roundrectangle",
                 "width": "label",
-                "height": 32,
-                "padding": "6px",
+                "height": "label",
+                "padding": "10px",
             },
         },
         // ---- metric-view compound (dashed border) ----
         {
             selector: "node[type='metric_view']",
             style: {
-                "background-color": "data(bgColor)",
+                "background-opacity": 0,
                 "border-color": "data(borderColor)",
                 "border-width": 2,
                 "border-style": "dashed",
@@ -89,25 +129,68 @@ function buildCyStyle(): any[] {
                 "shape": "roundrectangle",
             },
         },
-        // ---- measure node (hexagon) ----
+        // ---- dimension node (ellipse, inside metric_view) ----
+        {
+            selector: "node[type='dimension']",
+            style: {
+                "background-opacity": 0,
+                "border-color": "data(borderColor)",
+                "border-width": 1.5,
+                "border-style": "solid",
+                "label": "data(label)",
+                "text-valign": "center",
+                "text-halign": "center",
+                "font-size": 11,
+                "font-weight": "bold",
+                "color": "data(nodeTextColor)",
+                "text-wrap": "wrap",
+                "text-max-width": "110px",
+                "shape": "ellipse",
+                "width": "label",
+                "height": "label",
+                "padding": "10px",
+            },
+        },
+        // ---- dimension node (ellipse, inside metric_view) ----
+        {
+            selector: "node[type='dimension']",
+            style: {
+                "background-opacity": 0,
+                "border-color": "data(borderColor)",
+                "border-width": 1.5,
+                "label": "data(label)",
+                "text-valign": "center",
+                "text-halign": "center",
+                "font-size": 11,
+                "font-weight": "bold",
+                "color": "data(nodeTextColor)",
+                "text-wrap": "wrap",
+                "text-max-width": "110px",
+                "shape": "ellipse",
+                "width": "label",
+                "height": "label",
+                "padding": "10px",
+            },
+        },
+        // ---- measure node (roundrectangle) ----
         {
             selector: "node[type='measure']",
             style: {
-                "background-color": "data(bgColor)",
+                "background-opacity": 0,
                 "border-color": "data(borderColor)",
                 "border-width": 2.5,
                 "label": "data(label)",
                 "text-valign": "center",
                 "text-halign": "center",
-                "font-size": 10,
+                "font-size": 11,
                 "font-weight": "bold",
                 "color": "data(nodeTextColor)",
                 "text-wrap": "wrap",
-                "text-max-width": "110px",
-                "shape": "hexagon",
+                "text-max-width": "220px",
+                "shape": "roundrectangle",
                 "width": "label",
-                "height": 46,
-                "padding": "8px",
+                "height": "label",
+                "padding": "12px",
             },
         },
         // ---- edges — colour resolved from data ----
@@ -268,12 +351,24 @@ export function LineageGraph({ measures, measureColors, height = 340 }: Props) {
             <div className={styles.legend}>
                 {/* Entity shape guide */}
                 <span className={styles.legendItem}>
+                    <span className={styles.legendSwatchSquare} style={{ borderColor: "#868e96" }} />
+                    Catalog
+                </span>
+                <span className={styles.legendItem}>
+                    <span className={`${styles.legendSwatchSquare} ${styles.legendSwatchDotted}`} />
+                    Schema
+                </span>
+                <span className={styles.legendItem}>
                     <span className={styles.legendSwatchSquare} />
                     Table
                 </span>
                 <span className={styles.legendItem}>
-                    <span className={styles.legendSwatchEllipse} />
+                    <span className={styles.legendSwatchSquare} />
                     Column
+                </span>
+                <span className={styles.legendItem}>
+                    <span className={styles.legendSwatchEllipse} />
+                    Dimension
                 </span>
                 <span className={styles.legendItem}>
                     <span className={`${styles.legendSwatchSquare} ${styles.legendSwatchDashed}`} />
@@ -316,38 +411,6 @@ export function LineageGraph({ measures, measureColors, height = 340 }: Props) {
                 className={styles.canvas}
                 style={{ height }}
             />
-
-            {/* Measure details strip — expression + window specs */}
-            <div className={styles.measureDetails}>
-                {measures.map((m, i) => {
-                    const color = colors[i % colors.length];
-                    const ws = windowSummary(m.window);
-                    return (
-                        <div key={m.id} className={styles.measureDetail}>
-                            <span className={styles.measureDetailPill} style={{ background: color }} />
-                            <div className={styles.measureDetailBody}>
-                                <div className={styles.measureDetailHeader}>
-                                    <span className={styles.measureDetailName} style={{ color }}>{m.name}</span>
-                                    <span className={styles.measureDetailView}>{m.metric_view}</span>
-                                </div>
-                                <code className={styles.measureDetailExpr}>{m.expr}</code>
-                                {ws && (
-                                    <div className={styles.measureDetailWindow}>
-                                        <span className={styles.measureDetailWindowLabel}>Window</span>
-                                        {m.window.map((w, wi) => (
-                                            <span key={wi} className={styles.measureDetailWindowSpec}>
-                                                <strong>{w.order}</strong>
-                                                <span>{w.range}</span>
-                                                {w.semiadditive && <em>{w.semiadditive}</em>}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
         </div>
     );
 }
